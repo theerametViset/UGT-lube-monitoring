@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="UBE Lube Monitoring">
+  <!-- Vector redraw of public/logo.png: same robot, shirt and pulse bubble, crisp at any size. -->
+  <defs>
+    <clipPath id="disc"><circle cx="50" cy="51" r="42.5"/></clipPath>
+  </defs>
+  <circle cx="50" cy="51" r="42.5" fill="#0b4ea2"/>
+  <g clip-path="url(#disc)" fill="#fff">
+    <!-- shirt -->
+    <path d="M11.5 100 L13 72 Q14.5 61 25 57 L35.5 52 H49.5 L60 57 Q70.5 61 72 72 L73.5 100 Z"/>
+    <!-- neck -->
+    <rect x="36.5" y="47" width="12" height="10" rx="1.5"/>
+  </g>
+  <!-- collar + placket -->
+  <path d="M34 52.5 L37.5 61.5 L42.5 59.5 L47.5 61.5 L51 52.5 M37.5 61.5 L42.5 59.5 L47.5 61.5" fill="none" stroke="#0b4ea2" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M42.5 59.5 V67.5 M42.5 82.5 V100" stroke="#0b4ea2" stroke-width="1.4" clip-path="url(#disc)"/>
+  <path d="M23 66 V100 M62 66 V100" stroke="#0b4ea2" stroke-width="1.3" clip-path="url(#disc)"/>
+  <text x="42.6" y="79.5" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="12.5" letter-spacing="-0.3" fill="#0b4ea2">UBE</text>
+  <!-- antennas -->
+  <path d="M24.3 22 V29 M61 22 V29" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="24.3" cy="21.2" r="1.9" fill="#fff"/>
+  <circle cx="61" cy="21.2" r="1.9" fill="#fff"/>
+  <!-- ear pads -->
+  <rect x="21" y="28.5" width="5.5" height="11.5" rx="2.6" fill="#fff"/>
+  <rect x="58.6" y="28.5" width="5.5" height="11.5" rx="2.6" fill="#fff"/>
+  <!-- helmet -->
+  <path d="M25.5 33 Q25.5 17 42.6 17 Q59.7 17 59.7 33 V43 Q59.7 50.5 52 50.5 H33.2 Q25.5 50.5 25.5 43 Z" fill="#fff"/>
+  <path d="M34.5 18.5 Q37 23 37.4 27.5 M50.7 18.5 Q48.2 23 47.8 27.5" fill="none" stroke="#0b4ea2" stroke-width="1"/>
+  <!-- visor + eyes -->
+  <rect x="28.2" y="26.6" width="28.8" height="18" rx="7" fill="#0b4ea2"/>
+  <circle cx="35" cy="34.8" r="3.6" fill="#fff"/>
+  <circle cx="50.2" cy="34.8" r="3.6" fill="#fff"/>
+  <!-- speech bubble with pulse -->
+  <path d="M69.5 32.5 H91 Q94 32.5 94 35.5 V52.5 Q94 55.5 91 55.5 H76.5 L71.6 61 V55.5 H69.5 Q66.5 55.5 66.5 52.5 V35.5 Q66.5 32.5 69.5 32.5 Z" fill="#fff" stroke="#0b4ea2" stroke-width="1"/>
+  <polyline points="69.6,44 74.2,44 76.2,41.2 78.5,48.2 81.3,37.6 83.7,48.2 85.7,44.3 90.9,44.3" fill="none" stroke="#0b4ea2" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

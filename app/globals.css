@@ -1,0 +1,448 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* .follow-theme: popovers opened from the always-dark topbar get the page's theme back */
+:root,
+html:not([data-theme="dark"]) .follow-theme {
+  /* Inter has no Thai glyphs: Thai characters fall through to IBM Plex Sans
+     Thai (a matching humanist sans) instead of whatever the OS provides. */
+  --font-inter: "Inter", "IBM Plex Sans Thai", -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Sans Thai", ui-monospace, monospace;
+  /* Light theme (default) — R G B triples consumed by tailwind.config.ts */
+  --c-bg: 244 245 248;
+  --c-bg2: 255 255 255;
+  --c-bg3: 250 250 252;
+  --c-border: 228 230 235;
+  /* cards lift off the page with a soft shadow in light mode; dark mode uses lighter surfaces instead */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 2px 8px rgb(16 24 40 / 0.05);
+  --c-cyan: 0 102 204;
+  --c-cyan-dark: 41 151 255;
+  --c-cyan-focus: 0 113 227;
+  --c-green: 34 197 94;
+  --c-yellow: 245 158 11;
+  --c-red: 239 68 68;
+  --c-purple: 139 92 246;
+  --c-pink: 224 85 154;
+  --c-t1: 29 29 31;
+  --c-t2: 51 51 51;
+  /* 100 (not the original 122) so t3-on-white passes WCAG AA (4.5:1) for
+     normal-size text — 122 measured ~4.3:1, 100 measures ~5.9:1. */
+  --c-t3: 100 100 100;
+  --c-nav: 0 0 0;
+  /* Status colours for small TEXT on the page background. The brand red/amber
+     above are for fills and large type; on white they're only ~3.8:1 / 2.1:1. */
+  --c-crit-text: 185 28 28; /* #b91c1c — 6.5:1 on white */
+  --c-warn-text: 180 83 9; /* #b45309 — 5.0:1 on white */
+  --c-ok-text: 21 128 61; /* #15803d — 5.0:1 on white (brand green is 2.3:1) */
+  --c-cyan-text: 0 102 204; /* #0066cc — 5.6:1 on white */
+  --c-purple-text: 109 40 217; /* #6d28d9 — 7.1:1 on white */
+  --c-pink-text: 190 24 93; /* #be185d — 6.0:1 on white */
+}
+
+[data-theme="dark"] {
+  /* surfaces step up in lightness: page (bg) < card (bg2) < popover/modal (bg3) */
+  --c-bg: 10 11 14;
+  --c-bg2: 22 24 30;
+  --c-bg3: 31 34 42;
+  --c-border: 38 42 51;
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.02);
+  --c-t1: 242 242 245;
+  --c-t2: 199 199 207;
+  --c-t3: 139 139 147;
+  --c-crit-text: 248 113 113; /* #f87171 — 6.2:1 on bg2 */
+  --c-warn-text: 251 191 36; /* #fbbf24 — 10:1 on bg2 */
+  --c-ok-text: 74 222 128; /* #4ade80 — 10.6:1 on bg2 */
+  --c-cyan-text: 102 178 255; /* #66b2ff — 7.9:1 on bg2 (brand #0066cc is 3.2:1 here) */
+  --c-purple-text: 167 139 250; /* #a78bfa — 6.6:1 on bg2 */
+  --c-pink-text: 244 114 182; /* #f472b6 — 6.9:1 on bg2 */
+  /* The fill colours (cyan/green/yellow/red/purple/pink) stay the same in both
+     themes; only the *-text tokens above change, since text needs contrast. */
+}
+
+/* Surfaces that are dark in BOTH themes (sidebar, sign-in screens) use the
+   dark-theme text tokens even when the app is in light mode. */
+.on-dark {
+  --c-crit-text: 248 113 113;
+  --c-warn-text: 251 191 36;
+  --c-ok-text: 74 222 128;
+  --c-cyan-text: 102 178 255;
+  --c-purple-text: 167 139 250;
+  --c-pink-text: 244 114 182;
+}
+
+html,
+body {
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-t1));
+}
+body {
+  font-family: var(--font-inter);
+  /* figures line up in tables and KPI cards */
+  font-variant-numeric: tabular-nums;
+  /* Thai stacks vowels and tone marks above and below the line — give it room. */
+  line-height: 1.6;
+}
+
+/* Global keyboard-focus indicator — Tailwind's Preflight reset suppresses the
+   browser default outline on several elements, and most buttons/inputs in
+   this app don't set their own focus style. :focus-visible (not :focus) only
+   triggers for keyboard/programmatic focus, so mouse users see no change. */
+:focus-visible {
+  outline: 2px solid rgb(var(--c-cyan));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* scrollbars (parity) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--c-bg3));
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--c-cyan));
+}
+
+/* status badges (parity) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-crit {
+  background: rgba(239, 68, 68, 0.14);
+  color: rgb(var(--c-crit-text));
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+.badge-warn {
+  background: rgba(245, 158, 11, 0.13);
+  color: rgb(var(--c-warn-text));
+  border: 1px solid rgba(245, 158, 11, 0.26);
+}
+.badge-ok {
+  background: rgba(34, 197, 94, 0.13);
+  color: rgb(var(--c-ok-text));
+  border: 1px solid rgba(34, 197, 94, 0.26);
+}
+@keyframes pb {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.badge-crit-pulse {
+  animation: pb 2s infinite;
+}
+
+/* health bar */
+.hbar-track {
+  height: 3px;
+  background: rgba(0, 0, 0, 0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.hbar-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+/* live dot */
+@keyframes bl {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.dot-live {
+  animation: bl 2s infinite;
+}
+
+/* fade-in */
+@keyframes fs {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade {
+  animation: fs 0.2s ease;
+}
+
+/* Reduced motion: keep every state change, drop the movement and the loops.
+   Critical/live status is already carried by colour + text label, so the pulse
+   and blink can stop without losing meaning; the page fade keeps its opacity
+   change but not the slide; loading skeletons stay as static placeholders. */
+@keyframes fs-still {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Touch screens: controls get a finger-sized hit area (44px). Mouse/trackpad layouts are untouched — this only applies
+   when the primary pointer is coarse. */
+@media (pointer: coarse) {
+  .tap,
+  button,
+  select,
+  [role="tab"],
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]) {
+    min-height: 44px;
+  }
+  .tap,
+  button {
+    min-width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-crit-pulse,
+  .dot-live,
+  .animate-pulse {
+    animation: none;
+  }
+  .fade {
+    animation: fs-still 0.15s ease;
+  }
+}
+
+/* ===== Professional report (print / Save as PDF) ===== */
+.report-doc {
+  background: #fff;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-size: 9px;
+      color: #7a7a7a;
+    }
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  .report-doc {
+    box-shadow: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .report-doc,
+  .report-doc * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .rp-section {
+    break-inside: avoid;
+  }
+  .rp-row {
+    break-inside: avoid;
+  }
+  .page-break {
+    break-before: page;
+  }
+}
+
+/* Sidebar header: a faint amber/blue sheen drifting like light on an oil film. Decoration only. */
+.oil-sheen {
+  position: relative;
+  isolation: isolate;
+}
+.oil-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 15%, rgba(245, 158, 11, 0.16) 35%, rgba(41, 151, 255, 0.14) 55%, rgba(245, 158, 11, 0.1) 70%, transparent 88%);
+  background-size: 300% 100%;
+  animation: oil-sheen 24s ease-in-out infinite alternate;
+}
+@keyframes oil-sheen {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oil-sheen::before {
+    animation: none;
+    background-position: 50% 50%;
+  }
+}
+
+/* Dashboard oil level: the wave crest slides sideways; the SVG is two waves wide so -50% loops seamlessly. */
+.oil-wave {
+  animation: oil-wave 6s linear infinite;
+}
+.oil-wave-back {
+  animation: oil-wave 11s linear infinite reverse;
+}
+@keyframes oil-wave {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oil-wave,
+  .oil-wave-back {
+    animation: none;
+  }
+}
+
+/* Warning card: specks of sediment drifting up through the oil. */
+.oil-sediment {
+  opacity: 0;
+  animation: oil-sediment 6.5s ease-in-out infinite;
+}
+@keyframes oil-sediment {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.55;
+  }
+  80% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-26px) translateX(4px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oil-sediment {
+    animation: none;
+  }
+}
+
+
+/* Critical KPI card: the border and a soft red glow swell and fade, like an alarm light. */
+.kpi-alarm {
+  animation: kpi-alarm 2s ease-in-out infinite;
+}
+@keyframes kpi-alarm {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.22), 0 0 16px 2px rgba(239, 68, 68, 0.32);
+    border-color: rgba(239, 68, 68, 0.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kpi-alarm {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.22);
+  }
+}
+
+/* AI waiting: gear turns, a drop drips onto it. */
+.lube-gear {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gear-spin 2.4s linear infinite;
+}
+.lube-drip {
+  transform-box: fill-box;
+  animation: lube-drip 1.2s ease-in infinite;
+}
+@keyframes lube-drip {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}
+@keyframes gear-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Saving: a drop falls; when saved, a ring and check draw in. */
+.save-drop {
+  transform-box: fill-box;
+  animation: save-drop 0.9s ease-in infinite;
+}
+@keyframes save-drop {
+  0% {
+    transform: translateY(-3px) scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(5px) scale(1, 0.85);
+    opacity: 0.2;
+  }
+}
+.save-ring,
+.save-check {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: save-draw 0.5s ease-out forwards;
+}
+.save-check {
+  animation-delay: 0.25s;
+}
+@keyframes save-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lube-gear,
+  .lube-drip,
+  .save-drop {
+    animation: none;
+  }
+  .save-ring,
+  .save-check {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
