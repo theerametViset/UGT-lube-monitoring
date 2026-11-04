@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Activity, BookOpen, BrainCircuit, CalendarDays, ChartColumn, ChevronDown, Cog, History, ClipboardList, Download, Droplet, Droplets, Factory, FlaskConical, HeartPulse, Info, Paperclip, Ruler, Scale, Search, Siren, Sparkles, Target, Timer, TriangleAlert, Wrench, type LucideIcon } from "lucide-react";
+import { Activity, BrainCircuit, CalendarDays, ChartColumn, ChevronDown, Cog, History, ClipboardList, Download, Droplet, Droplets, Factory, FlaskConical, HeartPulse, Info, Paperclip, Ruler, Scale, Search, Siren, Sparkles, Target, Timer, TriangleAlert, Wrench, type LucideIcon } from "lucide-react";
 import { Card, Button, StatusBadge, HealthBar, ButtonLink } from "@/components/ui/primitives";
 import { DeductionSection } from "@/components/ui/DeductionSection";
 import { AdviceList } from "@/components/ui/AdviceList";
@@ -255,9 +255,6 @@ export function DrillDownClient({
   const latestOil = oilHistory.length ? oilHistory[oilHistory.length - 1] : null;
   const latestVib = vibHistory.length ? vibHistory[vibHistory.length - 1] : null;
   const cause = actionReason(audit, scoreConfig, latestOil, latestVib, asset.vg_grade);
-  // Standards that govern the readings behind the cause, for the "where does this limit come from" link.
-  const causeStandards = [...(relatedStandards?.oil ?? []), ...(relatedStandards?.vib ?? [])]
-    .filter((s, i, all) => all.findIndex((x) => x.id === s.id) === i && (s.related_params ?? []).some((k) => cause.keys.includes(k)));
 
   const lim = (cat: string, key: string) => params.find((p) => p.category === cat && p.key === key);
   const fe = lim("oil", "fe"),
@@ -337,14 +334,6 @@ export function DrillDownClient({
         <Card className={`mb-3 border-l-4 ${asset.status === "Critical" ? "!border-l-red" : "!border-l-yellow"}`}>
           <h2 className="mb-2 flex items-center gap-1.5 text-[18px] max-sm:text-[16px] font-semibold"><Wrench className="h-4 w-4 text-red" aria-hidden />สาเหตุหลัก <span className="text-[13px] font-medium text-t3">(Main cause)</span></h2>
           <AdviceList reason={cause} />
-          {causeStandards.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[13px] text-t3">
-              <BookOpen className="h-3.5 w-3.5" aria-hidden />มาตรฐานอ้างอิง:
-              {causeStandards.map((s) => (
-                <Link key={s.id} href={`/standards?q=${encodeURIComponent(s.title)}`} className="rounded-full border border-border px-2 py-0.5 text-cyan hover:border-cyan">{s.title}</Link>
-              ))}
-            </div>
-          )}
         </Card>
       )}
 
