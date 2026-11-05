@@ -277,7 +277,7 @@ export function AlarmClient({
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
             <div>
-              <h2 className="font-sans text-[22px] max-sm:text-[18px] font-bold">ตั้งค่าแจ้งเตือน (Alarm Configuration)</h2>
+              <h2 className="page-title font-sans text-[22px] max-sm:text-[18px] font-bold">ตั้งค่าแจ้งเตือน (Alarm Configuration)</h2>
               <div className="text-[14px] text-t2">ตั้งค่าขีดจำกัด (Thresholds) สำหรับน้ำมันและความสั่นสะเทือน</div>
             </div>
           </div>

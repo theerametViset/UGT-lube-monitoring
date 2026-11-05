@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BiLabel } from "@/components/ui/primitives";
-import { NAV_SECTIONS as SECTIONS, type NavItem } from "@/lib/nav";
+import { sectionsFor, type NavItem } from "@/lib/nav";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { LogoutButton } from "@/components/layout/LogoutButton";
-import type { Profile } from "@/lib/types";
+import type { Profile, Role } from "@/lib/types";
 
 const STORAGE_KEY = "sidebar-collapsed";
 
@@ -20,12 +20,18 @@ function isActive(pathname: string, href: string) {
 
 export function Sidebar({
   demo = false,
+  viewAsRoles,
+  menuMain,
   profile,
   permittedKeys = [],
   criticalCount = 0,
   warningCount = 0,
 }: {
   demo?: boolean;
+  /** Admins only (lib/auth.ts "view as"): roles the user can preview the app as. */
+  viewAsRoles?: Role[];
+  /** The role's "งานของฉัน" links (roles.menu_main); null = the original sidebar. */
+  menuMain?: string[] | null;
   profile: Profile;
   permittedKeys?: string[];
   /** Machines in Critical status, shown as a badge on the Dashboard entry. */
@@ -34,7 +40,9 @@ export function Sidebar({
   warningCount?: number;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const granted = new Set(permittedKeys);
+  const SECTIONS = useMemo(() => sectionsFor(menuMain), [menuMain]);
 
   // Start from the defaults so server and client render the same markup, then
   // apply what this browser remembered.
@@ -49,9 +57,10 @@ export function Sidebar({
       /* storage unavailable — keep defaults */
     }
   }, []);
-  function toggle(id: string) {
+  // `was` = the state shown: a section new to this role (e.g. "อื่นๆ") has no saved state yet.
+  function toggle(id: string, was: boolean) {
     setCollapsed((c) => {
-      const next = { ...c, [id]: !c[id] };
+      const next = { ...c, [id]: !was };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {
@@ -81,14 +90,15 @@ export function Sidebar({
         if (items.length === 0) return null;
         // A section holding the current page never hides it.
         const hasActive = items.some((i) => isActive(pathname, i.href));
-        const folded = !!section.collapsible && !!collapsed[section.id] && !hasActive;
+        const isCollapsed = collapsed[section.id] ?? !!section.defaultCollapsed;
+        const folded = !!section.collapsible && isCollapsed && !hasActive;
         const listId = `nav-${section.id}`;
         return (
           <div key={section.id} className={cn("pb-1", section.pinBottom && "mt-auto border-t border-white/10")}>
             {section.collapsible ? (
               <button
                 type="button"
-                onClick={() => toggle(section.id)}
+                onClick={() => toggle(section.id, isCollapsed)}
                 aria-expanded={!folded}
                 aria-controls={listId}
                 className="flex w-full items-center justify-between px-3 pb-1 pt-2.5 text-left text-[13px] font-bold text-white/55 transition hover:text-white/85 max-[760px]:hidden"
@@ -147,6 +157,25 @@ export function Sidebar({
             </div>
           </div>
         </div>
+        {viewAsRoles && viewAsRoles.length > 0 && (
+          <label className="mt-2 block max-[760px]:hidden">
+            <span className="text-[12px] text-t3">ดูในมุมมอง role{demo ? " (Demo)" : ""}</span>
+            <select
+              value={profile.role}
+              onChange={(e) => {
+                // Checked on the server (lib/auth.ts "view as"); picking your own role ends the preview.
+                const own = e.target.value === (profile.real_role ?? profile.role);
+                document.cookie = own
+                  ? "view-as=; path=/; max-age=0; samesite=lax"
+                  : `view-as=${e.target.value}; path=/; max-age=86400; samesite=lax`;
+                router.refresh();
+              }}
+              className="mt-0.5 w-full rounded-md border border-border bg-bg2 px-1.5 py-1 text-[13px] text-t1 outline-none focus:border-cyan"
+            >
+              {viewAsRoles.map((r) => <option key={r.id} value={r.id}>{r.label}{r.id === (profile.real_role ?? profile.role) ? " · ของฉัน" : ""}</option>)}
+            </select>
+          </label>
+        )}
         <div className="mt-2 flex items-center justify-between gap-1.5 max-[760px]:flex-col">
           <ThemeToggle />
           <LogoutButton />

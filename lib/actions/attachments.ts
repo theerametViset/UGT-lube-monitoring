@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/env";
 import { demoBlocked, runAction, type ActionResult } from "./result";
 import { requirePermission } from "./guards";
+import { demoCan } from "@/lib/queries/permissions";
 import { listStandardAttachments } from "@/lib/queries/attachments";
 import type { StandardAttachment } from "@/lib/types";
 import {
@@ -87,6 +88,7 @@ export async function deleteAttachment(
   assetId: string,
 ): Promise<ActionResult> {
   if (isLocalStore()) {
+    if (!demoCan("attachments:write")) return { ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (attachments:write)" };
     const row = getLocalAttachment(id);
     if (!row || row.storage_path !== storagePath) return { ok: false, message: "ไม่พบไฟล์แนบ" };
     deleteLocalAttachment(id);

@@ -59,6 +59,7 @@ export function DataEntryClient({
   demo,
   localStore = false,
   canUpload,
+  canSave = true,
   initialAssetId,
 }: {
   assets: AssetOption[];
@@ -67,6 +68,8 @@ export function DataEntryClient({
   /** Demo Mode that really saves readings + files to disk (lib/local-store.ts). */
   localStore?: boolean;
   canUpload: boolean;
+  /** readings:write — without it the form is look-only (no Submit, no batch import). */
+  canSave?: boolean;
   initialAssetId?: string;
 }) {
   const router = useRouter();
@@ -533,11 +536,11 @@ export function DataEntryClient({
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="flex items-center gap-1.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><FlaskConical className="h-4 w-4 shrink-0" aria-hidden />ป้อนข้อมูลผลวิเคราะห์ (Data Entry)</h2>
+            <h2 className="page-title flex items-center gap-2.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><FlaskConical className="h-4 w-4 shrink-0" aria-hidden />ป้อนข้อมูลผลวิเคราะห์ (Data Entry)</h2>
             <div className="text-[14px] text-t2">ระบบป้อนข้อมูลผลแล็บ รองรับการแนบไฟล์ PDF/Excel และดึงค่าจาก Excel อัตโนมัติ</div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {canUpload && (
+            {canUpload && canSave && (
               <Button size="sm" variant="ghost" onClick={() => setBatchOpen(true)}>
                 <Upload className="h-3.5 w-3.5 shrink-0" aria-hidden /><span className="whitespace-nowrap">นำเข้าไฟล์ Excel (Batch)</span>
               </Button>
@@ -767,11 +770,17 @@ export function DataEntryClient({
               ค่าเกินเกณฑ์ ควรเปิดงานซ่อม
             </div>
           )}
-          <Button variant="ok" onClick={() => onSubmit()} disabled={busy || justSaved} className="mt-3 w-full justify-center py-2.5">
-            {busy ? <><SaveDrop saved={false} />กำลังบันทึก…</>
-              : justSaved ? <><SaveDrop saved />บันทึกแล้ว</>
-              : <><Database className="h-3.5 w-3.5" aria-hidden />บันทึกข้อมูลเข้าระบบ (Submit Record)</>}
-          </Button>
+          {canSave ? (
+            <Button variant="ok" onClick={() => onSubmit()} disabled={busy || justSaved} className="mt-3 w-full justify-center py-2.5">
+              {busy ? <><SaveDrop saved={false} />กำลังบันทึก…</>
+                : justSaved ? <><SaveDrop saved />บันทึกแล้ว</>
+                : <><Database className="h-3.5 w-3.5" aria-hidden />บันทึกข้อมูลเข้าระบบ (Submit Record)</>}
+            </Button>
+          ) : (
+            <div className="mt-3 rounded-md border border-border px-3 py-2 text-center text-[14px] text-t3">
+              Role ของคุณดูข้อมูลได้อย่างเดียว — ไม่มีสิทธิ์บันทึกผล (readings:write)
+            </div>
+          )}
           {demo && !localStore && <div className="mt-1.5 text-center text-[13px] text-t3">ดึงค่าจาก Excel ได้ แต่ยังไม่บันทึกไฟล์จริง (ยังไม่ได้เชื่อม Supabase)</div>}
           {localStore && (
             <div className="mt-1.5 text-center text-[13px] text-t3">

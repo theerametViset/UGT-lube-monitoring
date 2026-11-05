@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { isLocalStore } from "@/lib/env";
+import { demoCan } from "@/lib/queries/permissions";
 import { addLocalAttachment } from "@/lib/local-store";
 import { isDemoAssetId } from "@/lib/demo-data";
 import { isPeriod } from "@/lib/parse/period";
@@ -18,6 +19,7 @@ export const dynamic = "force-dynamic";
 // Same validation as the real path; the row lands in reading_attachments.json.
 export async function POST(request: NextRequest) {
   if (!isLocalStore()) return NextResponse.json({ ok: false, message: "Local Store ปิดอยู่" }, { status: 404 });
+  if (!demoCan("attachments:write")) return NextResponse.json({ ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (attachments:write)" }, { status: 403 });
 
   const form = await request.formData();
   const file = form.get("file");

@@ -5,7 +5,7 @@ import { Bar } from "react-chartjs-2";
 import { ImageDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ChartOptions, Plugin } from "chart.js";
-import { ensureChartRegistered, tokenColor } from "@/lib/chart";
+import { barEntrance, ensureChartRegistered, stackedBarLook, tokenColor, tooltipLook } from "@/lib/chart";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
 import type { SiteAgg } from "@/lib/queries/assets";
 import { ProblemsToggle, StatusLegend } from "./ProblemsToggle";
@@ -23,8 +23,9 @@ const problemCountsPlugin: Plugin<"bar"> = {
     const opts = (chart.options.plugins as any)?.problemCounts;
     if (!opts) return;
     const { ctx } = chart;
-    const warn = chart.data.datasets[1]?.data as number[];
-    const crit = chart.data.datasets[2]?.data as number[];
+    const real = (i: number) => ((chart.data.datasets[i] as { real?: number[] })?.real ?? chart.data.datasets[i]?.data) as number[];
+    const warn = real(1);
+    const crit = real(2);
     const top = chart.getDatasetMeta(2).data; // Critical is the top of the stack
     ctx.save();
     ctx.font = "bold 14px sans-serif";
@@ -75,8 +76,16 @@ export function SiteReliabilityChart({
   const data = problemsOnly ? problemRows(allSites) : allSites;
   void dark; // re-render on theme change so tokenColor() reads the new palette
   const tick = tokenColor("t2");
-  const grid = tokenColor("border", 0.7);
+  const grid = tokenColor("border", 0.35);
+  // second line: the plant's average Health Score (cached assets.health) — the card's subtitle says so
   const labels = data.map((d) => [d.code, `${d.avgHealth}`]);
+  const look = stackedBarLook();
+
+  const stackMax = Math.max(1, ...data.map((d) => (problemsOnly ? d.warning + d.critical : d.total)));
+  // "ทั้งหมด": 1 critical among 249 machines would be a sub-pixel sliver. Draw each problem segment
+  // at least ~7px (on a ~220px plot) so it shows; the counts above the bar and the tooltip keep the real numbers.
+  const floor = problemsOnly ? 0 : (7 / 220) * stackMax * 1.12;
+  const shown = (n: number) => (n > 0 ? Math.max(n, floor) : 0);
 
   const chartData = {
     labels,
@@ -86,34 +95,42 @@ export function SiteReliabilityChart({
         label: "ปกติ",
         // problems-only: the healthy machines would dwarf the few that need attention
         data: data.map((d) => (problemsOnly ? 0 : d.healthy)),
-        backgroundColor: tokenColor("green", 0.85),
+        // muted, so the eye goes to the warning / critical segments first
+        backgroundColor: tokenColor("green", 0.5),
+        hoverBackgroundColor: tokenColor("green", 0.75),
         stack: "s",
+        ...look,
       },
       {
         type: "bar" as const,
         label: "เฝ้าระวัง",
-        data: data.map((d) => d.warning),
+        data: data.map((d) => shown(d.warning)),
+        real: data.map((d) => d.warning),
         backgroundColor: tokenColor("yellow", 0.85),
+        hoverBackgroundColor: tokenColor("yellow"),
         stack: "s",
+        ...look,
       },
       {
         type: "bar" as const,
         label: "วิกฤต",
-        data: data.map((d) => d.critical),
+        data: data.map((d) => shown(d.critical)),
+        real: data.map((d) => d.critical),
         backgroundColor: tokenColor("red", 0.9),
+        hoverBackgroundColor: tokenColor("red"),
         stack: "s",
+        ...look,
       },
     ],
   };
 
-  const stackMax = Math.max(1, ...data.map((d) => (problemsOnly ? d.warning + d.critical : d.total)));
   // Round step so the top tick is a clean number.
   const step = [1, 2, 5, 10, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((s) => stackMax / s <= 6) ?? 10000;
 
   const options: ChartOptions<"bar"> = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: noAnimation ? false : undefined,
+    animation: barEntrance(noAnimation),
     // Room above the bars for the Warning/Critical counts.
     layout: { padding: { top: 24 } },
     // whole column is the hit area, so thin bars (e.g. UTCA) are as easy to click as tall ones
@@ -136,12 +153,15 @@ export function SiteReliabilityChart({
       // @ts-expect-error custom plugin option
       problemCounts: { warnColor: tokenColor("yellow"), critColor: tokenColor("red") },
       tooltip: {
+        ...tooltipLook(),
         mode: "index" as const,
         callbacks: {
           title: (items) => (items[0] ? data[items[0].dataIndex]?.code ?? "" : ""),
+          // the real count, not the floored height drawn for a thin segment
+          label: (c) => ` ${c.dataset.label}: ${(c.dataset as { real?: number[] }).real?.[c.dataIndex] ?? c.parsed.y} เครื่อง`,
           footer: (items) => {
             const d = items[0] ? data[items[0].dataIndex] : undefined;
-            return d ? [`คะแนนสุขภาพเฉลี่ย ${d.avgHealth}`, ...(siteHrefs ? ["คลิกเพื่อกรองโรงงานนี้"] : [])] : "";
+            return d ? [`Health Score เฉลี่ยของ ${d.total} เครื่อง: ${d.avgHealth}`, ...(siteHrefs ? ["คลิกเพื่อกรองโรงงานนี้"] : [])] : "";
           },
         },
       },
@@ -158,7 +178,8 @@ export function SiteReliabilityChart({
         // grace leaves room above the tallest stack for the Warning/Critical counts
         grace: "12%",
         grid: { color: grid },
-        ticks: { color: tick, font: { size: 14 }, stepSize: step },
+        border: { display: false },
+        ticks: { color: tick, font: { size: 14 }, stepSize: step, padding: 6 },
       },
     },
   };

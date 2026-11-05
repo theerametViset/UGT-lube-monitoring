@@ -2,7 +2,7 @@ import type { DashboardData } from "@/lib/queries/assets";
 import { healthColor } from "@/lib/scoring/health";
 
 // Escape user/LLM text before embedding in HTML email (XSS guard).
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

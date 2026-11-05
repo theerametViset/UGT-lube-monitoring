@@ -11,10 +11,11 @@ export default async function DataEntryPage({ searchParams }: { searchParams: { 
 
   // Storage uploads require attachments:write (AUD-005 policy) — hide the picker
   // from roles that cannot upload, instead of letting the upload fail silently.
-  const [assets, reference, canUpload] = await Promise.all([
+  const [assets, reference, canUpload, canSave] = await Promise.all([
     getAssetOptions(),
     getReference(),
     hasPermission("attachments:write"),
+    hasPermission("readings:write"),
   ]);
   return (
     <DataEntryClient
@@ -23,6 +24,7 @@ export default async function DataEntryPage({ searchParams }: { searchParams: { 
       demo={isDemoMode()}
       localStore={isLocalStore()}
       canUpload={canUpload}
+      canSave={canSave}
       initialAssetId={searchParams.asset}
     />
   );

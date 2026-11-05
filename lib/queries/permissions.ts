@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/env";
 import { getDemoPermissions, getDemoRolePermissions, getDemoRoles } from "@/lib/demo-data";
+import { demoRole, getCurrentProfile, viewAsCookie } from "@/lib/auth";
 import type { Permission, Role } from "@/lib/types";
 
 // The single call site for the has_permission() RPC — hasPermission() and
@@ -22,12 +23,21 @@ export async function checkHasPermission(
 // so a page's UI-gating decision (e.g. show/hide a "+ create" button) can never
 // drift out of sync with what the server action actually allows.
 //
-// Demo Mode's synthetic profile is always role="admin" (lib/auth.ts), which
-// holds every permission by design — so this short-circuits to true rather
-// than querying a role_permissions table that doesn't exist in demo data.
+// Demo Mode answers from the previewed role's demo grants (lib/auth.ts demoRole),
+// so the role picker shows each role's real menus and buttons.
+export function demoCan(perm: string): boolean {
+  return getDemoRolePermissions(demoRole()).includes(perm);
+}
+
 export async function hasPermission(perm: string): Promise<boolean> {
-  if (isDemoMode()) return true;
+  if (isDemoMode()) return demoCan(perm);
   const supabase = createClient();
+  // An admin previewing a role (lib/auth.ts "view as") sees that role's screens: the
+  // previewed grants AND the user's own — a preview can only hide, never add.
+  if (viewAsCookie()) {
+    const profile = await getCurrentProfile();
+    if (profile?.real_role && !(await getRolePermissionKeys(profile.role)).includes(perm)) return false;
+  }
   return checkHasPermission(supabase, perm);
 }
 
@@ -37,6 +47,15 @@ export async function listRoles(): Promise<Role[]> {
   const { data, error } = await supabase.from("roles").select("id,label,is_system").order("label");
   if (error) throw new Error(error.message);
   return (data ?? []) as Role[];
+}
+
+// The role's sidebar layout (roles.menu_main, 0034). null on any error — e.g. 0034 not run
+// yet — so the sidebar falls back to the original menu instead of failing the page.
+export async function getRoleMenu(roleId: string): Promise<string[] | null> {
+  if (isDemoMode()) return getDemoRoles().find((r) => r.id === roleId)?.menu_main ?? null;
+  const supabase = createClient();
+  const { data, error } = await supabase.from("roles").select("menu_main").eq("id", roleId).maybeSingle();
+  return error ? null : ((data?.menu_main as string[] | null) ?? null);
 }
 
 // Permission keys granted to a given role (for pre-checking checkboxes in the
@@ -70,6 +89,13 @@ export async function listRolesWithPermissions(): Promise<{ roles: Role[]; permi
   if (rolesRes.error) throw new Error(rolesRes.error.message);
   if (permsRes.error) throw new Error(permsRes.error.message);
   if (rpRes.error) throw new Error(rpRes.error.message);
+
+  // Separate, error-tolerant read: before 0034 runs there is no menu_main column.
+  const menus = await supabase.from("roles").select("id,menu_main");
+  if (!menus.error) {
+    const byId = new Map((menus.data ?? []).map((r) => [r.id as string, r.menu_main as string[] | null]));
+    for (const r of rolesRes.data as Role[]) r.menu_main = byId.get(r.id) ?? null;
+  }
 
   const grants: Record<string, string[]> = {};
   for (const row of rpRes.data ?? []) {

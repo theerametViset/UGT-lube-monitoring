@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpDown, CircleCheck, Cog, Download, Eye, Factory, Pencil, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { Card, Button, StatusBadge, HealthBar, ButtonLink } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
+import { SiteSegments } from "@/components/ui/SiteSegments";
 import { useToast } from "@/components/ui/Toast";
 import { createAsset, deleteAllAssets, deleteAsset, deleteAssets, exportAssetsJson, importAssets, updateAsset } from "@/lib/actions/assets";
 import { downloadFile } from "@/lib/export";
@@ -141,7 +142,7 @@ export function AssetDbClient({ rows, total, page, pages, site, q, status, sort,
     <Card className="py-2.5">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="flex items-center gap-1.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><Cog className="h-4 w-4" aria-hidden />ฐานข้อมูลเครื่องจักร (Master Asset Database)</h2>
+          <h2 className="page-title flex items-center gap-2.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><Cog className="h-4 w-4" aria-hidden />ฐานข้อมูลเครื่องจักร (Master Asset Database)</h2>
           <div className="text-[14px] text-t2">จัดการแก้ไขทรัพย์สินทั้งหมดในระบบ</div>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -158,21 +159,32 @@ export function AssetDbClient({ rows, total, page, pages, site, q, status, sort,
         </div>
       </div>
 
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        <a href={siteHref("", q, status, sort)} className={pillCls(site === "")}><Factory className="h-3.5 w-3.5" aria-hidden />ทั้งหมด <span className={pillBadgeCls(true)}>{grandTotal}</span></a>
-        {sites.map((s) => {
-          const count = siteCounts[s.code] ?? 0; const active = site === s.code;
-          return (<a key={s.code} href={siteHref(s.code, q, status, sort)} className={pillCls(active)}><Factory className="h-3.5 w-3.5" aria-hidden />{s.code} <span className={pillBadgeCls(active)}>{count}</span></a>);
-        })}
-      </div>
+      <SiteSegments
+        className="mb-2"
+        active={site}
+        items={[
+          { key: "", label: "ทั้งหมด", count: grandTotal, href: siteHref("", q, status, sort), icon: <Factory className="h-3.5 w-3.5" aria-hidden /> },
+          ...sites.map((s) => ({ key: s.code, label: s.code, count: siteCounts[s.code] ?? 0, href: siteHref(s.code, q, status, sort) })),
+        ]}
+      />
 
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        {(["", "Critical", "Warning", "Healthy"] as const).map((st) => (
-          <a key={st || "all"} href={siteHref(site, q, st, sort)} className={pillCls(status === st)}>
-            {st === "" ? "ทั้งหมด" : st === "Critical" ? "วิกฤต" : st === "Warning" ? "เฝ้าระวัง" : "ปกติ"}
-          </a>
-        ))}
-        <a href={siteHref(site, q, status, sort ? "" : "health_asc")} className={pillCls(!!sort)}><ArrowUpDown className="h-3.5 w-3.5" aria-hidden />เรียงคะแนนน้อย→มาก</a>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <SiteSegments
+          className=""
+          label="กรองตามสถานะ"
+          active={status}
+          items={(["", "Critical", "Warning", "Healthy"] as const).map((st) => ({
+            key: st,
+            label: st === "" ? "ทั้งหมด" : st === "Critical" ? "วิกฤต" : st === "Warning" ? "เฝ้าระวัง" : "ปกติ",
+            href: siteHref(site, q, st, sort),
+          }))}
+        />
+        {/* an on/off toggle, so a standalone button sized like the bars beside it */}
+        <a
+          href={siteHref(site, q, status, sort ? "" : "health_asc")}
+          aria-current={sort ? "true" : undefined}
+          className={"tap inline-flex items-center gap-1.5 self-stretch rounded-xl border px-3 text-[14px] font-semibold transition " + (sort ? "border-cyan/50 bg-cyan/10 text-cyan" : "border-border bg-bg2 text-t2 hover:text-t1")}
+        ><ArrowUpDown className="h-3.5 w-3.5" aria-hidden />เรียงคะแนนน้อย→มาก</a>
       </div>
 
       <form method="get" action="/assets" className="flex flex-wrap items-center gap-2">
@@ -180,7 +192,7 @@ export function AssetDbClient({ rows, total, page, pages, site, q, status, sort,
         {status && <input type="hidden" name="status" value={status} />}
         {sort && <input type="hidden" name="sort" value={sort} />}
         <input name="q" defaultValue={q} placeholder="ค้นหาด้วย ID หรือชื่อ..." aria-label="ค้นหาเครื่องจักรด้วย ID หรือชื่อ" className="min-w-[200px] flex-1 rounded-pill border border-border bg-bg2 px-3 py-1.5 text-[14px] outline-none focus:border-cyan" />
-        <button className="rounded-pill bg-cyan px-4 py-1.5 text-[14px] font-semibold text-white">ค้นหา</button>
+        <button className="rounded-pill bg-gradient-to-b from-cyan to-cyan-dark text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_4px_14px_rgba(0,102,204,0.28)] hover:brightness-110 px-4 py-1.5 text-[14px] font-semibold transition active:scale-95">ค้นหา</button>
       </form>
     </Card>
 

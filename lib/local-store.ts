@@ -154,6 +154,16 @@ export function upsertLocalVib(row: LocalKey & Partial<VibReading>): void {
   writeTable("vib_readings", rows);
 }
 
+/** Remove one saved period. false = nothing saved locally for it (e.g. built-in demo history). */
+export function deleteLocalReading(kind: "oil" | "vib", assetId: string, period: string): boolean {
+  const table = kind === "oil" ? "oil_readings" : "vib_readings";
+  const all = kind === "oil" ? getLocalOil() : getLocalVib();
+  const rows = all.filter((r) => !(r.asset_id === assetId && r.period === period));
+  if (rows.length === all.length) return false;
+  writeTable(table, rows);
+  return true;
+}
+
 /** Built-in demo history with locally saved periods replacing/adding to it, oldest first. */
 export function mergeHistory<T extends { period: string }>(base: T[], local: (T & { asset_id: string; updated_at: string })[]): T[] {
   if (local.length === 0) return base;

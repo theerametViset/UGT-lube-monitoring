@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode, isLocalStore } from "@/lib/env";
-import { getLocalOil, getLocalVib, upsertLocalOil, upsertLocalVib } from "@/lib/local-store";
+import { deleteLocalReading, getLocalOil, getLocalVib, upsertLocalOil, upsertLocalVib } from "@/lib/local-store";
 import { getDemoOilHistory, isDemoAssetId } from "@/lib/demo-data";
 import { isFuturePeriod, isPeriod } from "@/lib/parse/period";
 import { STORED_COLS, readingCols } from "@/lib/reading-fields";
@@ -12,6 +12,7 @@ import { getReadingsHistory } from "@/lib/queries/readings";
 import type { OilReading, VibReading } from "@/lib/types";
 import { demoBlocked, runAction, type ActionResult } from "./result";
 import { requirePermission } from "./guards";
+import { demoCan } from "@/lib/queries/permissions";
 import { logAudit } from "./audit-log";
 
 export interface ReadingInput {
@@ -21,8 +22,39 @@ export interface ReadingInput {
   values: Record<string, number | string | null>;
 }
 
+// Delete one period's oil or vibration reading (a reading saved on the wrong machine or month).
+// The DB trigger (0035) recomputes the machine's Health Score from what is left.
+export async function deleteReading(input: { assetId: string; period: string; kind: "oil" | "vib" }): Promise<ActionResult> {
+  const { assetId, period, kind } = input;
+  if (!assetId || !isPeriod(period) || (kind !== "oil" && kind !== "vib")) return { ok: false, message: "ข้อมูลไม่ถูกต้อง" };
+  const done = (): ActionResult => {
+    revalidatePath("/dashboard");
+    revalidatePath("/assets");
+    revalidatePath(`/assets/${assetId}`);
+    return { ok: true, message: `ลบผล${kind === "oil" ? "น้ำมัน" : "สั่นสะเทือน"} งวด ${period} แล้ว` };
+  };
+  if (isLocalStore()) {
+    if (!demoCan("readings:write")) return { ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (readings:write)" };
+    if (!deleteLocalReading(kind, assetId, period)) return { ok: false, message: "งวดนี้เป็นข้อมูลตัวอย่าง (ไม่ได้บันทึกในเครื่องนี้) — ลบไม่ได้" };
+    await logAudit({ action: "DELETE", table_name: `${kind}_readings`, record_id: `${assetId}|${period}` });
+    return done();
+  }
+  if (isDemoMode()) return demoBlocked();
+  return runAction(async () => {
+    const auth = await requirePermission("readings:write");
+    if (!auth.ok) return auth.error;
+    const supabase = createClient();
+    // RLS (oil_modify / vib_modify) also checks readings:write and the machine's site
+    const { data, error } = await supabase.from(`${kind}_readings`).delete().eq("asset_id", assetId).eq("period", period).select();
+    if (error) return { ok: false, message: error.message };
+    if (!data?.length) return { ok: false, message: "ไม่พบผลงวดนี้ หรือไม่มีสิทธิ์ลบ" };
+    await logAudit({ action: "DELETE", table_name: `${kind}_readings`, record_id: `${assetId}|${period}`, old_value: data[0] as Record<string, unknown> });
+    return done();
+  });
+}
+
 export async function saveReading(input: ReadingInput): Promise<ActionResult> {
-  if (isLocalStore()) return runAction(async () => saveReadingLocal(input));
+  if (isLocalStore()) return demoCan("readings:write") ? runAction(async () => saveReadingLocal(input)) : { ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (readings:write)" };
   if (isDemoMode()) return demoBlocked();
   return runAction(async () => {
     const auth = await requirePermission("readings:write");
@@ -129,6 +161,7 @@ const batchKey = (assetId: string, period: string) => `${assetId}|${period}`;
 // closing the tab halfway left half a file saved. Rows go into an upsert only with rows
 // that have the same columns, so a file without TAN never writes TAN = null over a saved one.
 export async function saveOilBatch(rows: OilBatchRow[]): Promise<BatchResult> {
+  if (isLocalStore() && !demoCan("readings:write")) return { ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (readings:write)" };
   if (isLocalStore()) {
     return runAction(async (): Promise<BatchResult> => {
       const failedKeys: string[] = [];

@@ -3,7 +3,7 @@ import { Ban } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { isDemoMode } from "@/lib/env";
-import { getRolePermissionKeys } from "@/lib/queries/permissions";
+import { getRoleMenu, getRolePermissionKeys, listRoles } from "@/lib/queries/permissions";
 import {
   getDemoAssets,
   getDemoNotifications,
@@ -30,12 +30,7 @@ export default async function AppLayout({
   const demo = isDemoMode();
 
   if (demo) {
-    profile = {
-      id: "demo-admin",
-      full_name: "Admin",
-      role: "admin",
-      site_access: [],
-    };
+    profile = (await getCurrentProfile())!;
     notifications = getDemoNotifications();
     criticalCount = getDemoAssets().filter((a) => a.status === "Critical").length;
     warningCount = getDemoAssets().filter((a) => a.status === "Warning").length;
@@ -87,17 +82,21 @@ export default async function AppLayout({
   // rather than take down the whole app (unlike the page-level data queries
   // below it, which are allowed to fail their own page via error.tsx).
   let permittedKeys: string[] = [];
+  const menuMain = await getRoleMenu(profile.role);
   try {
     permittedKeys = await getRolePermissionKeys(profile.role);
   } catch (err) {
     console.error("[AppLayout] getRolePermissionKeys failed", err);
   }
+  // "View as" picker: admins only (Demo Mode's user is admin). Previewing ⇒ real_role is set.
+  const canViewAs = !!profile.real_role || permittedKeys.includes("users:manage");
+  const viewAsRoles = canViewAs ? await listRoles().catch(() => []) : undefined;
 
   return (
     // fixed inset-0, not h-screen: being positioned keeps absolute descendants (sr-only
     // labels) from escaping to <body> and making the whole page scroll into an empty band.
     <div className="fixed inset-0 flex overflow-hidden">
-      <Sidebar demo={demo} profile={profile} permittedKeys={permittedKeys} criticalCount={criticalCount} warningCount={warningCount} />
+      <Sidebar demo={demo} viewAsRoles={viewAsRoles} menuMain={menuMain} profile={profile} permittedKeys={permittedKeys} criticalCount={criticalCount} warningCount={warningCount} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           title="ศูนย์เฝ้าระวังความเสี่ยง (Fleet Risk Center)"
@@ -108,6 +107,11 @@ export default async function AppLayout({
         {showDemoWarning && (
           <div className="flex items-center justify-center gap-2 bg-red px-3 py-1.5 text-center text-[14px] font-bold text-white">
             <Ban className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />PRODUCTION WARNING: DEMO_MODE is active — data is sample, writes are blocked. Set DEMO_MODE=false and provide Supabase env.
+          </div>
+        )}
+        {profile.real_role && profile.role !== profile.real_role && (
+          <div className="bg-cyan/10 px-3 py-1.5 text-center text-[13px] font-semibold text-cyan" role="status">
+            กำลังดูในมุมมอง role &quot;{viewAsRoles?.find((r) => r.id === profile.role)?.label ?? profile.role}&quot;{demo ? " (Demo)" : ""} — เปลี่ยนแค่เมนูและปุ่มที่เห็น สิทธิ์จริงของคุณไม่เปลี่ยน · กลับได้ที่การ์ดผู้ใช้ท้าย Sidebar
           </div>
         )}
         <main className="relative flex-1 overflow-y-auto px-[19px] py-[15px]">{children}</main>

@@ -67,6 +67,22 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+// Links a role's sidebar layout (roles.menu_main, 0034) may list; "/admin" = open the Admin group.
+export const MENU_HREFS = [...NAV_SECTIONS[0].items.map((i) => i.href), "/admin"];
+
+// A role's sidebar: its menu_main links on top ("งานของฉัน"), the other main links folded
+// under "อื่นๆ". View only — the sidebar still hides links the role has no permission for.
+export function sectionsFor(menuMain?: string[] | null): NavSection[] {
+  const [main, ...rest] = NAV_SECTIONS;
+  const mine = (menuMain ?? []).flatMap((h) => main.items.filter((i) => i.href === h));
+  if (mine.length === 0) return NAV_SECTIONS;
+  return [
+    { ...main, id: "mine", title: "งานของฉัน (My work)", items: mine },
+    { id: "more", title: "อื่นๆ (More)", collapsible: true, defaultCollapsed: true, items: main.items.filter((i) => !mine.includes(i)) },
+    ...rest.map((s) => (s.id === "admin" ? { ...s, defaultCollapsed: !menuMain!.includes("/admin") } : s)),
+  ];
+}
+
 // Find the nav item whose href best matches a pathname (longest-prefix match,
 // so nested routes like /assets/[id] resolve to the "/assets" nav entry).
 export function findNavItem(pathname: string): NavItem | null {

@@ -71,7 +71,8 @@ export function HealthBadge({ score, size = "md" }: { score: number; size?: "md"
 
 type ButtonVariant = "primary" | "ghost" | "danger" | "ok" | "critical";
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-cyan text-white hover:bg-cyan-focus",
+  // same gradient as the segmented filter bars
+  primary: "bg-gradient-to-b from-cyan to-cyan-dark text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_4px_14px_rgba(0,102,204,0.28)] hover:brightness-110",
   ghost:
     "bg-bg2 text-t1 border border-border hover:border-cyan hover:text-cyan",
   danger:
@@ -174,31 +175,6 @@ export function HealthBar({ score }: { score: number }) {
           style={{ width: `${score}%`, background: healthColor(score) }}
         />
       </div>
-    </div>
-  );
-}
-
-export function Pill({
-  children,
-  active,
-  className,
-  ...props
-}: {
-  children: ReactNode;
-  active?: boolean;
-} & React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        "rounded-pill border px-2.5 py-1 text-[14px] font-semibold transition",
-        active
-          ? "border-cyan/40 bg-cyan/10 text-cyan"
-          : "border-border text-t2 hover:border-cyan hover:text-cyan",
-        className,
-      )}
-      {...props}
-    >
-      {children}
     </div>
   );
 }

@@ -78,3 +78,20 @@ describe("buildExportSql", () => {
     expect(sql).toContain("set local standard_conforming_strings = on;");
   });
 });
+
+describe("deleteLocalReading", () => {
+  it("removes one saved period and reports a period that was never saved", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    process.env.LOCAL_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ls-del-"));
+    const { upsertLocalOil, getLocalOil, deleteLocalReading } = await import("./local-store");
+    upsertLocalOil({ asset_id: "A-1", period: "2026-09", fe: 10 });
+    upsertLocalOil({ asset_id: "A-1", period: "2026-10", fe: 20 });
+    expect(deleteLocalReading("oil", "A-1", "2026-09")).toBe(true);
+    expect(getLocalOil("A-1").map((r) => r.period)).toEqual(["2026-10"]);
+    expect(deleteLocalReading("oil", "A-1", "2026-09")).toBe(false);
+    expect(deleteLocalReading("vib", "A-1", "2026-10")).toBe(false);
+    delete process.env.LOCAL_DATA_DIR;
+  });
+});

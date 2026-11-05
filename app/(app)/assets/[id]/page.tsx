@@ -37,7 +37,7 @@ export default async function AssetDetailPage({
   const asset = await getAsset(id);
   if (!asset) notFound();
 
-  const [{ oil, vib }, maintenance, alarm, reference, attachments, standards, compareOptions, canManageMaint, canManageAttachments, canReadHistory] = await Promise.all([
+  const [{ oil, vib }, maintenance, alarm, reference, attachments, standards, compareOptions, canManageMaint, canManageAttachments, canReadHistory, canDeleteReadings] = await Promise.all([
     getReadingsHistory(id),
     listMaintenance(id),
     getAssetAlarmConfig(id),
@@ -49,6 +49,7 @@ export default async function AssetDetailPage({
     hasPermission("attachments:write"),
     // Demo / Local Store have no logins; in Supabase the audit log is audit:read only.
     isDemoMode() ? Promise.resolve(true) : hasPermission("audit:read"),
+    hasPermission("readings:write"),
   ]);
   const history = canReadHistory ? await getAssetHistory(id) : null;
 
@@ -80,6 +81,7 @@ export default async function AssetDetailPage({
       compareOptions={compareOptions.filter((a) => a.id !== asset.id)}
       canManageMaint={canManageMaint}
       canManageAttachments={canManageAttachments}
+      canDeleteReadings={canDeleteReadings}
       history={history}
     />
   );

@@ -6,6 +6,7 @@ import { isDemoMode } from "@/lib/env";
 import { demoBlocked, runAction, type ActionResult } from "./result";
 import { requirePermission } from "./guards";
 import { logAudit } from "./audit-log";
+import { MENU_HREFS } from "@/lib/nav";
 
 // role id is used as a Postgres text primary key AND referenced from
 // profiles.role — keep it a plain slug so it's safe in both places and in URLs.
@@ -50,6 +51,26 @@ export async function deleteRole(roleId: string): Promise<ActionResult> {
     await logAudit({ action: "DELETE", table_name: "roles", record_id: roleId });
     revalidatePath("/admin/roles");
     return { ok: true, message: "ลบ Role สำเร็จ" };
+  });
+}
+
+// The role's sidebar layout (0034): which main-menu links sit on top, in order. View only —
+// it grants nothing (links still follow permissions). Empty/null = the original sidebar.
+export async function setRoleMenu(roleId: string, hrefs: string[] | null): Promise<ActionResult> {
+  if (isDemoMode()) return demoBlocked();
+  return runAction(async () => {
+    const auth = await requirePermission("users:manage");
+    if (!auth.ok) return auth.error;
+    const list = hrefs ?? [];
+    if (list.some((h) => !MENU_HREFS.includes(h)) || new Set(list).size !== list.length) {
+      return { ok: false, message: "รายการเมนูไม่ถูกต้อง" };
+    }
+    const supabase = createClient();
+    const { error } = await supabase.from("roles").update({ menu_main: list.length ? list : null }).eq("id", roleId);
+    if (error) return { ok: false, message: error.message };
+    await logAudit({ action: "UPDATE", table_name: "roles", record_id: roleId, new_value: { menu_main: list } });
+    revalidatePath("/", "layout");
+    return { ok: true, message: "บันทึกเมนูสำเร็จ" };
   });
 }
 

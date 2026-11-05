@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getDashboardData } from "@/lib/queries/assets";
 import { sendEmail } from "@/lib/email/send";
-import { weeklyDigestEmail } from "@/lib/email/weekly-digest";
+import { buildWeeklyDigest } from "@/lib/email/weekly-digest-build";
 import { getNotificationConfig } from "@/lib/queries/notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/env";
@@ -30,15 +29,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, message: "Weekly digest disabled or no recipients" });
     }
 
-    const { data } = await getDashboardData("", admin);
-
-    const { subject, html } = weeklyDigestEmail({
-      totalAssets: data.kpis.total,
-      critical: data.kpis.critical,
-      warning: data.kpis.warning,
-      avgHealth: data.kpis.avgHealth,
-      topCritical: data.topCritical.slice(0, 5).map((a) => ({ id: a.id, name: a.name, health: a.health })),
-    });
+    const { subject, html } = await buildWeeklyDigest(admin);
 
     const result = await sendEmail({
       to: cfg.email_recipients,

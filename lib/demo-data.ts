@@ -1198,10 +1198,11 @@ const DEMO_PERMISSIONS: Permission[] = [
 ];
 
 const DEMO_ROLES: Role[] = [
-  { id: "admin", label: "ผู้ดูแลระบบ (Admin)", is_system: true },
-  { id: "engineer", label: "วิศวกร (Engineer)", is_system: true },
-  { id: "manager", label: "ผู้จัดการ (Manager)", is_system: true },
-  { id: "viewer", label: "ผู้ดูข้อมูล (Viewer)", is_system: true },
+  // menu_main = the same starting layout 0034 seeds
+  { id: "admin", label: "ผู้ดูแลระบบ (Admin)", is_system: true, menu_main: ["/dashboard", "/assets", "/config/alarms", "/admin"] },
+  { id: "engineer", label: "วิศวกร (Engineer)", is_system: true, menu_main: ["/data-entry", "/dashboard", "/assets", "/config/alarms"] },
+  { id: "manager", label: "ผู้จัดการ (Manager)", is_system: true, menu_main: ["/reports", "/dashboard"] },
+  { id: "viewer", label: "ผู้ดูข้อมูล (Viewer)", is_system: true, menu_main: ["/dashboard", "/standards"] },
 ];
 
 // Every "view" permission (module:read / reports:view) is granted to all 4

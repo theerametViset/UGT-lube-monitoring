@@ -1,10 +1,11 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/env";
 import { getDemoOilHistory, getDemoVibHistory } from "@/lib/demo-data";
 import type { OilReading, VibReading } from "@/lib/types";
 
-// Latest readings for an asset.
-export async function getLatestReadings(assetId: string): Promise<{
+// Latest readings for an asset. `supabase`: the cron's service-role client (no user session).
+export async function getLatestReadings(assetId: string, supabase?: SupabaseClient): Promise<{
   oil: OilReading | null;
   vib: VibReading | null;
 }> {
@@ -16,7 +17,7 @@ export async function getLatestReadings(assetId: string): Promise<{
       vib: vib.length ? vib[vib.length - 1] : null,
     };
   }
-  const supabase = createClient();
+  supabase ??= createClient();
   const [oilRes, vibRes] = await Promise.all([
     supabase
       .from("oil_readings")

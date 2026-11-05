@@ -40,3 +40,52 @@ export function tokenColor(name: string, alpha = 1): string {
   const [r, g, b] = (rgb || "128 128 128").split(/\s+/);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+// ---- Stacked status bars (Dashboard site + type charts): one look for both.
+type BarCtx = import("chart.js").ScriptableContext<"bar">;
+// The last visible, non-zero segment of a bar's stack: the one that gets the rounded end.
+function stackTop(c: BarCtx): number {
+  const ds = c.chart.data.datasets;
+  for (let i = ds.length - 1; i >= 0; i--) if (c.chart.isDatasetVisible(i) && Number(ds[i].data[c.dataIndex]) > 0) return i;
+  return -1;
+}
+export function stackedBarLook(horizontal = false) {
+  const end = horizontal ? { topRight: 6, bottomRight: 6 } : { topLeft: 6, topRight: 6 };
+  // A segment only a few px tall (2 warnings among 200 healthy) would vanish under the gap line.
+  const tall = (c: BarCtx) => {
+    const s = c.chart.scales[horizontal ? "x" : "y"];
+    return Math.abs(s.getPixelForValue(Number(c.raw)) - s.getPixelForValue(0)) > 6;
+  };
+  return {
+    borderRadius: (c: BarCtx) => (c.datasetIndex === stackTop(c) ? end : 0),
+    // a 2px surface-coloured gap between stacked segments
+    borderWidth: (c: BarCtx) => (c.datasetIndex === stackTop(c) || !tall(c) ? 0 : horizontal ? { right: 2 } : { top: 2 }),
+    borderColor: tokenColor("bg2"),
+    borderSkipped: false as const,
+  };
+}
+// Bars rise one after another on first draw; none for print or reduced motion.
+export function barEntrance(off = false) {
+  const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (off || reduce) return false as const;
+  return {
+    duration: 700,
+    easing: "easeOutQuart" as const,
+    delay: (c: { type: string; mode: string; dataIndex: number }) => (c.type === "data" && c.mode === "default" ? c.dataIndex * 70 : 0),
+  };
+}
+// Tooltip in the app's surface colours instead of Chart.js's default black box.
+export function tooltipLook() {
+  return {
+    backgroundColor: tokenColor("bg3", 0.97),
+    titleColor: tokenColor("t1"),
+    bodyColor: tokenColor("t2"),
+    footerColor: tokenColor("t3"),
+    borderColor: tokenColor("border"),
+    borderWidth: 1,
+    padding: 10,
+    cornerRadius: 8,
+    boxPadding: 4,
+    usePointStyle: true,
+  };
+}

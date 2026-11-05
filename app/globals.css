@@ -295,10 +295,34 @@ body {
     background-position: 100% 50%;
   }
 }
+/* A narrow glint crosses the logo, then rests: 1.2 s of movement in every 8 s. */
+.oil-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 236, 200, 0.22) 48%, rgba(255, 255, 255, 0.32) 50%, rgba(251, 191, 36, 0.18) 52%, transparent 60%);
+  background-size: 250% 100%;
+  background-position: 120% 0;
+  animation: logo-glint 8s cubic-bezier(0.65, 0, 0.35, 1) 1.5s infinite;
+}
+@keyframes logo-glint {
+  0% {
+    background-position: 120% 0;
+  }
+  15%,
+  100% {
+    background-position: -20% 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .oil-sheen::before {
     animation: none;
     background-position: 50% 50%;
+  }
+  .oil-sheen::after {
+    display: none;
   }
 }
 
@@ -382,6 +406,32 @@ body {
   transform-box: fill-box;
   animation: lube-drip 1.2s ease-in infinite;
 }
+/* PageLoader: the small gear (2/3 the size) turns the other way 1.5x as fast, so the teeth mesh. */
+.lube-gear-rev {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gear-spin 1.6s linear infinite reverse;
+}
+/* The ripple shares the drip's 1.2 s cycle and opens as the drop lands. */
+.lube-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lube-ripple 1.2s ease-out infinite;
+}
+@keyframes lube-ripple {
+  0%,
+  70% {
+    transform: scaleX(0.3);
+    opacity: 0;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
 @keyframes lube-drip {
   0% {
     transform: translateY(0);
@@ -436,7 +486,9 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .lube-gear,
+  .lube-gear-rev,
   .lube-drip,
+  .lube-ripple,
   .save-drop {
     animation: none;
   }
@@ -445,4 +497,24 @@ body {
     animation: none;
     stroke-dashoffset: 0;
   }
+}
+
+/* Page headings: the icon sits in a soft rounded tile, the line under the title reads quieter. */
+.page-title > svg:first-child {
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  padding: 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  color: rgb(var(--c-cyan-text));
+  background: rgb(var(--c-cyan) / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-cyan) / 0.18);
+}
+.page-title {
+  letter-spacing: -0.01em;
+}
+.page-title + .text-t2 {
+  margin-top: 4px;
+  color: rgb(var(--c-t3));
 }

@@ -272,7 +272,7 @@ export function StandardsClient({
       <Card className="mb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="flex items-center gap-1.5 font-sans text-[22px] max-sm:text-[18px] font-bold">
+            <h2 className="page-title flex items-center gap-2.5 font-sans text-[22px] max-sm:text-[18px] font-bold">
               <BookOpen className="h-4 w-4" aria-hidden />คลังมาตรฐานวิศวกรรม (Engineering Standards Library)
             </h2>
             <div className="text-[14px] text-t2">ฐานข้อมูลอ้างอิง ISO / ASTM / SAE / API</div>

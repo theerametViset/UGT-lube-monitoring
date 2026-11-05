@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/env";
 import {
@@ -17,11 +18,12 @@ export interface AssetAlarmConfig extends AlarmConfig {
   hasOverride: boolean;
 }
 
-export async function getAlarmConfig(): Promise<AlarmConfig> {
+// `supabase` (here and below): the cron's service-role client; omitted = the user's session.
+export async function getAlarmConfig(supabase?: SupabaseClient): Promise<AlarmConfig> {
   if (isDemoMode()) {
     return { params: getDemoAlarmParams(), scoreConfig: getDemoScoreConfig() };
   }
-  const supabase = createClient();
+  supabase ??= createClient();
   const [paramsRes, cfgRes] = await Promise.all([
     supabase
       .from("alarm_params")
@@ -42,16 +44,16 @@ export async function getAlarmConfig(): Promise<AlarmConfig> {
   };
 }
 
-async function getAssetAlarmOverrides(assetId: string): Promise<AssetAlarmOverride[]> {
+async function getAssetAlarmOverrides(assetId: string, supabase?: SupabaseClient): Promise<AssetAlarmOverride[]> {
   if (isDemoMode()) return getDemoAssetAlarmOverrides(assetId);
-  const supabase = createClient();
+  supabase ??= createClient();
   const { data } = await supabase.from("asset_alarm_overrides").select("*").eq("asset_id", assetId);
   return (data ?? []) as AssetAlarmOverride[];
 }
 
-async function getAssetScoreOverride(assetId: string): Promise<AssetScoreOverride | null> {
+async function getAssetScoreOverride(assetId: string, supabase?: SupabaseClient): Promise<AssetScoreOverride | null> {
   if (isDemoMode()) return getDemoAssetScoreOverride(assetId);
-  const supabase = createClient();
+  supabase ??= createClient();
   const { data } = await supabase.from("asset_score_overrides").select("*").eq("asset_id", assetId).maybeSingle();
   return (data as AssetScoreOverride) ?? null;
 }
@@ -59,11 +61,11 @@ async function getAssetScoreOverride(assetId: string): Promise<AssetScoreOverrid
 /** Effective (merged) alarm config for one asset — global config with any
  * asset-level overrides applied on top, param-by-param / field-by-field. */
 // `base`: the global config, when the caller already loaded it for many assets.
-export async function getAssetAlarmConfig(assetId: string, base?: AlarmConfig): Promise<AssetAlarmConfig> {
+export async function getAssetAlarmConfig(assetId: string, base?: AlarmConfig, supabase?: SupabaseClient): Promise<AssetAlarmConfig> {
   const [{ params, scoreConfig }, paramOverrides, scoreOverride] = await Promise.all([
-    base ?? getAlarmConfig(),
-    getAssetAlarmOverrides(assetId),
-    getAssetScoreOverride(assetId),
+    base ?? getAlarmConfig(supabase),
+    getAssetAlarmOverrides(assetId, supabase),
+    getAssetScoreOverride(assetId, supabase),
   ]);
 
   const mergedParams = params.map((p) => {

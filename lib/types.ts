@@ -10,7 +10,10 @@ export type UserRole = string;
 export interface Profile {
   id: string;
   full_name: string | null;
+  /** The role the app renders as — the previewed one while an admin uses "view as". */
   role: UserRole;
+  /** Set while previewing: the user's own role (Demo Mode's user is always admin). */
+  real_role?: UserRole;
   site_access: string[];
   created_at?: string;
 }
@@ -19,6 +22,8 @@ export interface Role {
   id: string;
   label: string;
   is_system: boolean;
+  /** Sidebar "งานของฉัน" links in order (0034); null/absent = the original sidebar. View only. */
+  menu_main?: string[] | null;
 }
 
 export interface Permission {

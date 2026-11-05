@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Bar } from "react-chartjs-2";
 import type { Chart, ChartOptions } from "chart.js";
-import { ensureChartRegistered, tokenColor } from "@/lib/chart";
+import { barEntrance, ensureChartRegistered, stackedBarLook, tokenColor, tooltipLook } from "@/lib/chart";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
 import type { TypeAgg } from "@/lib/queries/assets";
 import { ProblemsToggle, StatusLegend } from "./ProblemsToggle";
@@ -48,7 +48,8 @@ export function RiskConcentrationChart({ data }: { data: TypeAgg[] }) {
   void dark; // re-render on theme change so tokenColor() reads the new palette
   const tick = tokenColor("t2");
   const tickMuted = tokenColor("t2");
-  const grid = tokenColor("border", 0.7);
+  const grid = tokenColor("border", 0.35);
+  const look = stackedBarLook(true);
   const [showAll, setShowAll] = useState(false);
   const [problemsOnly, setProblemsOnly] = useState(true);
 
@@ -95,20 +96,26 @@ export function RiskConcentrationChart({ data }: { data: TypeAgg[] }) {
         label: "วิกฤต",
         data: rows.map((d) => d.critical),
         backgroundColor: tokenColor("red", 0.8),
+        hoverBackgroundColor: tokenColor("red"),
         stack: "s",
+        ...look,
       },
       {
         label: "เฝ้าระวัง",
         data: rows.map((d) => d.warning),
         backgroundColor: tokenColor("yellow", 0.75),
+        hoverBackgroundColor: tokenColor("yellow"),
         stack: "s",
+        ...look,
       },
       {
         label: "ปกติ",
         // problems-only: the healthy machines would dwarf the few that need attention
         data: rows.map((d) => (problemsOnly ? 0 : d.healthy)),
         backgroundColor: tokenColor("green", 0.55),
+        hoverBackgroundColor: tokenColor("green", 0.8),
         stack: "s",
+        ...look,
       },
     ],
   };
@@ -117,11 +124,13 @@ export function RiskConcentrationChart({ data }: { data: TypeAgg[] }) {
     indexAxis: "y",
     responsive: true,
     maintainAspectRatio: false,
+    animation: barEntrance(),
     // Right padding keeps the bar-total labels inside the canvas
     layout: { padding: { right: 40 } },
     plugins: {
       legend: { display: false },
       tooltip: {
+        ...tooltipLook(),
         callbacks: {
           label(ctx) {
             return ` ${ctx.dataset.label}: ${ctx.parsed.x} เครื่อง`;
@@ -138,6 +147,7 @@ export function RiskConcentrationChart({ data }: { data: TypeAgg[] }) {
       x: {
         stacked: true,
         grid: { color: grid },
+        border: { display: false },
         ticks: { color: tick, font: { size: 14 }, precision: 0 },
       },
       y: {

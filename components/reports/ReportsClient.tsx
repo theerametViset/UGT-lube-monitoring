@@ -117,7 +117,7 @@ export function ReportsClient({
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="flex items-center gap-1.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><FileChartColumn className="h-4 w-4" aria-hidden />ระบบรายงานผู้บริหาร (Board-Level Reporting)</h2>
+            <h2 className="page-title flex items-center gap-2.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><FileChartColumn className="h-4 w-4" aria-hidden />ระบบรายงานผู้บริหาร (Board-Level Reporting)</h2>
             <div className="text-[14px] text-t2">สร้างรายงานมืออาชีพ A4 — เปิดหน้าพิมพ์แล้ว Save as PDF</div>
           </div>
           {generated && (

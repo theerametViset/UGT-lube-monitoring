@@ -13,6 +13,25 @@ export function GearSpinner({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+// Page loading: two meshing gears, oil dripping onto them and rippling in the sump.
+export function PageLoader({ label = "กำลังโหลด..." }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center py-20" role="status">
+      <div className="flex flex-col items-center gap-3">
+        <span className="relative block h-16 w-20" aria-hidden>
+          <Cog className="lube-gear absolute left-1 top-3 h-11 w-11 text-cyan" strokeWidth={1.6} />
+          <Cog className="lube-gear-rev absolute right-1 top-1 h-7 w-7 text-t3" strokeWidth={1.8} />
+          <svg viewBox="0 0 80 64" className="absolute inset-0 h-full w-full">
+            <path className="lube-drip" d="M23 0 Q26.5 5 23 8 Q19.5 5 23 0 Z" fill="#f59e0b" />
+            <ellipse className="lube-ripple" cx="23" cy="61" rx="16" ry="2" fill="none" stroke="#f59e0b" strokeWidth="1.5" />
+          </svg>
+        </span>
+        <span className="text-[13px] text-t3">{label}</span>
+      </div>
+    </div>
+  );
+}
+
 // Saving: a drop falls while the request runs; once saved it turns into a check mark.
 export function SaveDrop({ saved, className = "h-4 w-4" }: { saved: boolean; className?: string }) {
   return (

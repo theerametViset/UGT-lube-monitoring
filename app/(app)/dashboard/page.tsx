@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { ChartColumn, CircleCheck, ClipboardList, Cog, Factory, OctagonAlert, Shapes, TriangleAlert, Wrench } from "lucide-react";
 import { getDashboardData, getAssetsList } from "@/lib/queries/assets";
-import { getLatestReadings } from "@/lib/queries/readings";
-import { getAlarmConfig, getAssetAlarmConfig } from "@/lib/queries/alarms";
-import { getDeductionBreakdown } from "@/lib/scoring/audit";
-import { actionReason, type ActionReason } from "@/lib/scoring/advice";
+import { getActionReasons, NO_REASON } from "@/lib/queries/action-reasons";
 import { AdviceList } from "@/components/ui/AdviceList";
+import { SiteSegments } from "@/components/ui/SiteSegments";
 import type { Asset, AssetStatus } from "@/lib/types";
 import {
   Card,
   KpiCard,
-  Pill,
   HealthBar,
   HealthBadge,
   StatusBadge,
@@ -48,27 +45,6 @@ function getAgingColor(lastUpdate: string | null): string {
   if (diffDays > 90) return "text-red font-semibold";  // Over 3 months - critical urgency
   if (diffDays > 30) return "text-yellow";  // Over 1 month - moderate urgency
   return "text-green";  // Recent - low urgency
-}
-
-// Why each machine in the action list is losing points (see actionReason).
-const NO_REASON: ActionReason = { advice: [], notes: [], keys: [] };
-
-async function getActionReasons(assets: Asset[]): Promise<Record<string, ActionReason>> {
-  const out: Record<string, ActionReason> = {};
-  // once, not once per asset; on failure each asset loads its own instead of the page crashing
-  const base = await getAlarmConfig().catch(() => undefined);
-  await Promise.all(
-    assets.map(async (a) => {
-      try {
-        const [{ oil, vib }, cfg] = await Promise.all([getLatestReadings(a.id), getAssetAlarmConfig(a.id, base)]);
-        const b = getDeductionBreakdown(oil, vib, cfg.params, cfg.scoreConfig, a.vg_grade);
-        out[a.id] = actionReason(b, cfg.scoreConfig, oil, vib, a.vg_grade);
-      } catch {
-        out[a.id] = NO_REASON;
-      }
-    }),
-  );
-  return out;
 }
 
 // A KPI card that is a link; `active` marks the status currently filtering the table.
@@ -135,32 +111,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   return (
     <div id="main-content" className="fade min-w-0">
-      {/* Site filter pills */}
-      {/* One row that scrolls sideways on a phone, instead of six stacked rows. */}
-      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-        <Pill active={site === ""} className="inline-flex shrink-0 items-center gap-1">
-          <Link href={buildHref(base, { site: "" })} className="tap inline-flex items-center gap-1.5 whitespace-nowrap">
-            <ChartColumn className="h-3.5 w-3.5" aria-hidden />ทุกโรงงาน (All Sites)
-          </Link>
-        </Pill>
-        {reference.sites.map((s) => {
-          const agg = data.perSite.find((p) => p.code === s.code);
-          return (
-            <Pill
-              key={s.code}
-              active={site === s.code}
-              className="inline-flex shrink-0 items-center gap-1"
-            >
-              <Link href={buildHref(base, { site: s.code })} className="tap inline-flex items-center gap-1.5 whitespace-nowrap">
-                <Factory className="h-3.5 w-3.5" aria-hidden />{s.code}
-                <span className="ml-1 rounded bg-cyan/15 px-1 text-[14px] text-cyan">
-                  {agg?.total ?? 0}
-                </span>
-              </Link>
-            </Pill>
-          );
-        })}
-      </div>
+      {/* Site filter: one segmented bar */}
+      <SiteSegments
+        active={site}
+        items={[
+          { key: "", label: "ทุกโรงงาน (All Sites)", count: data.perSite.reduce((n, p) => n + p.total, 0), href: buildHref(base, { site: "" }), icon: <ChartColumn className="h-3.5 w-3.5" aria-hidden /> },
+          ...reference.sites.map((s) => ({
+            key: s.code,
+            label: s.code,
+            count: data.perSite.find((p) => p.code === s.code)?.total ?? 0,
+            href: buildHref(base, { site: s.code }),
+          })),
+        ]}
+      />
 
       {/* KPI grid — each status card filters the fleet table (click again to clear);
           the total card opens the Asset Database sorted worst-first. */}
@@ -278,7 +241,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 <span className="text-[13px] font-medium text-t3">(Health by Site)</span>
               </h2>
               <div className="text-[14px] text-t2">
-                ตัวเลขใต้ชื่อโรงงานคือคะแนนสุขภาพเฉลี่ย กดที่แท่งเพื่อกรองตามโรงงาน
+                ตัวเลขใต้ชื่อโรงงาน = Health Score เฉลี่ยของทุกเครื่องในโรงงาน · กดแท่งเพื่อกรอง
               </div>
             </div>
           </div>
@@ -342,7 +305,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               </select>
               <button
                 type="submit"
-                className="rounded-pill bg-cyan px-2.5 py-1 text-[14px] font-semibold text-white"
+                className="rounded-pill bg-gradient-to-b from-cyan to-cyan-dark text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_4px_14px_rgba(0,102,204,0.28)] hover:brightness-110 px-2.5 py-1 text-[14px] font-semibold transition active:scale-95"
               >
                 ค้นหา
               </button>

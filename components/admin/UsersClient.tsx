@@ -126,7 +126,7 @@ export function UsersClient({
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="flex items-center gap-1.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><Users className="h-4 w-4" aria-hidden />จัดการผู้ใช้ (User Management)</h2>
+            <h2 className="page-title flex items-center gap-2.5 font-sans text-[22px] max-sm:text-[18px] font-bold"><Users className="h-4 w-4" aria-hidden />จัดการผู้ใช้ (User Management)</h2>
             <div className="text-[14px] text-t2">ดู/แก้บทบาท/ลบผู้ใช้ทั้งหมดในระบบ</div>
           </div>
           <div className="flex items-center gap-1.5">

@@ -15,6 +15,7 @@ import { VibrationHistoryChart } from "@/components/charts/VibrationHistoryChart
 import { RcaChart } from "@/components/charts/RcaChart";
 import { MaintenanceTab } from "@/components/drilldown/MaintenanceTab";
 import { HistoryTab } from "@/components/drilldown/HistoryTab";
+import { ReadingsTable } from "@/components/drilldown/ReadingsTable";
 import type { HistoryEntry } from "@/lib/asset-history";
 import { AttachmentsPanel } from "@/components/drilldown/AttachmentsPanel";
 import { StandardCard } from "@/components/standards/StandardContent";
@@ -157,6 +158,7 @@ export function DrillDownClient({
   compareOptions,
   canManageMaint,
   canManageAttachments,
+  canDeleteReadings = false,
   history,
 }: {
   asset: Asset;
@@ -174,6 +176,8 @@ export function DrillDownClient({
   compareOptions: AssetOption[];
   canManageMaint: boolean;
   canManageAttachments: boolean;
+  /** readings:write — a delete button per saved period in the oil / vibration tabs. */
+  canDeleteReadings?: boolean;
   /** null = this role may not read the audit log, so the tab is hidden. */
   history: HistoryEntry[] | null;
 }) {
@@ -423,6 +427,16 @@ export function DrillDownClient({
           ) : (
             <Card className="mb-3"><div className="py-6 text-center text-[13px] text-t3">ไม่มีข้อมูล Oil Analysis</div></Card>
           )}
+          <ReadingsTable
+            assetId={asset.id}
+            kind="oil"
+            rows={oilHistory as never}
+            canDelete={canDeleteReadings}
+            columns={[
+              { key: "fe", label: "Fe (ppm)" }, { key: "water", label: "น้ำ (ppm)" }, { key: "tan", label: "TAN" },
+              { key: "visc", label: "Visc (cSt)" }, { key: "iso_code", label: "ISO 4406" },
+            ]}
+          />
           <Card>
             <h2 className="mb-2 flex items-center gap-1.5 font-sans text-[18px] max-sm:text-[16px] font-semibold"><Droplet className="h-4 w-4" aria-hidden />ข้อมูลหลักการหล่อลื่น (Lubrication Master Data)</h2>
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
@@ -466,6 +480,13 @@ export function DrillDownClient({
             <Metric label="Overall velocity (RMS)" value={latestVib?.vel ?? "—"} unit="mm/s" warn={vel?.warn_limit} crit={vel?.crit_limit} color="#0066cc" />
             <Metric label="Peak acceleration" value={latestVib?.acc ?? "—"} unit="g-PK" warn={acc?.warn_limit} crit={acc?.crit_limit} color="#f472b6" />
           </div>
+          <ReadingsTable
+            assetId={asset.id}
+            kind="vib"
+            rows={vibHistory as never}
+            canDelete={canDeleteReadings}
+            columns={[{ key: "vel", label: "Vel (mm/s)" }, { key: "acc", label: "Acc (g-PK)" }, { key: "temp", label: "Temp (°C)" }]}
+          />
           <AttachmentsAndStandards
             assetId={asset.id}
             kind="vib"
