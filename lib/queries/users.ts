@@ -80,3 +80,20 @@ export async function listUsers(opts: { q?: string; page?: number; pageSize?: nu
   const start = (p - 1) * pageSize;
   return { rows: all.slice(start, start + pageSize), total, page: p, pages, pageSize };
 }
+
+/**
+ * How many PEOPLE could still manage users if `withoutRole` lost users:manage and/or
+ * `withoutUser` lost it (role change). Counting roles is not enough: a role nobody holds keeps
+ * the old check happy while no one can open the Admin pages any more. Fails closed (0) on error.
+ */
+export async function managersLeft(opts: { withoutRole?: string; withoutUser?: string }): Promise<number> {
+  const admin = createAdminClient();
+  const { data: roles, error } = await admin.from("role_permissions").select("role_id").eq("permission_key", "users:manage");
+  if (error) return 0;
+  const ids = (roles ?? []).map((r) => r.role_id as string).filter((r) => r !== opts.withoutRole);
+  if (!ids.length) return 0;
+  let q = admin.from("profiles").select("id", { count: "exact", head: true }).in("role", ids);
+  if (opts.withoutUser) q = q.neq("id", opts.withoutUser);
+  const { count, error: cErr } = await q;
+  return cErr ? 0 : count ?? 0;
+}

@@ -77,13 +77,8 @@ export async function parseBatchExcel(file: File): Promise<BatchRow[]> {
       // First header wins: the "Standard / Result" row under it must not remap the
       // column ("Standard" contains "tan" and used to turn Viscosity into TAN).
       if (colMap.has(c)) continue;
-      if (ct.includes("viscosity") || ct.includes("visc") || ct.includes("cst")) colMap.set(c, "visc");
-      else if (ct.includes("water")) colMap.set(c, "water");
-      else if (ct.includes("ferrous") || ct.includes("iron") || ct.includes("fe ")) colMap.set(c, "fe");
-      else if (/tan/.test(ct) || ct.includes("mgkoh")) colMap.set(c, "tan");
-      else if (ct.includes("particle 4") || ct.includes("4um") || ct.includes("4\u03bcm")) colMap.set(c, "particle_4");
-      else if (ct.includes("particle 6") || ct.includes("6um") || ct.includes("6\u03bcm")) colMap.set(c, "particle_6");
-      else if (ct.includes("particle 14") || ct.includes("14um") || ct.includes("14\u03bcm")) colMap.set(c, "particle_14");
+      const param = oilHeaderParam(ct);
+      if (param) colMap.set(c, param);
     }
   }
 
@@ -148,4 +143,21 @@ export async function parseBatchExcel(file: File): Promise<BatchRow[]> {
   }
 
   return result;
+}
+
+// One lab header (lower-cased) → the oil reading it holds. Whole words and whole numbers, so
+// "14µm" is not 4 µm, "Tank (L)" / "Standard" are not TAN, and a bare "Fe" is Fe. Both the micro
+// sign µ (U+00B5, what Excel types) and Greek μ (U+03BC) count. First match wins; 14 before 4.
+const UM = "\\s*[u\u00b5\u03bc]m";
+const OIL_HEADERS: [string, RegExp][] = [
+  ["visc", /visc|cst|kinematic/],
+  ["water", /water|moisture|h2o/],
+  ["fe", /ferrous|iron|\bfe\b/],
+  ["tan", /\btan\b|total acid|acid number|mgkoh/],
+  ["particle_14", new RegExp(`particle\\s*14|(^|\\D)14${UM}|>\\s*14(?!\\d)`)],
+  ["particle_6", new RegExp(`particle\\s*6|(^|\\D)6${UM}|>\\s*6(?!\\d)`)],
+  ["particle_4", new RegExp(`particle\\s*4|(^|\\D)4${UM}|>\\s*4(?!\\d)`)],
+];
+export function oilHeaderParam(header: string): string | null {
+  return OIL_HEADERS.find(([, re]) => re.test(header))?.[0] ?? null;
 }

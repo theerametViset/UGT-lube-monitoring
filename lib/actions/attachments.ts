@@ -18,6 +18,7 @@ import {
   validateAttachment,
 } from "@/lib/attachment-rules";
 import { isLocalStore } from "@/lib/env";
+import { isPeriod } from "@/lib/parse/period";
 import { deleteLocalAttachment, getLocalAttachment } from "@/lib/local-store";
 
 const BUCKET = "lab-attachments";
@@ -40,6 +41,11 @@ export async function registerAttachment(input: RegisterInput): Promise<ActionRe
   if (!auth.ok) return auth.error;
   const invalid = validateAttachment(input.fileName, input.mimeType, input.sizeBytes, MAX_LAB_ATTACHMENT_BYTES, LAB_ATTACHMENT_MIME_TYPES, LAB_ATTACHMENT_EXTENSIONS);
   if (invalid) return { ok: false, message: invalid };
+  // the row must point at this machine's own file (<asset>/<period>/...), in a real period
+  if (!isPeriod(input.period)) return { ok: false, message: "งวดไม่ถูกต้อง" };
+  if (!input.storagePath.startsWith(`${input.assetId}/${input.period}/`) || input.storagePath.includes("..")) {
+    return { ok: false, message: "ตำแหน่งไฟล์ไม่ตรงกับเครื่องจักรนี้" };
+  }
   const supabase = createClient();
   const {
     data: { user },
@@ -100,9 +106,10 @@ export async function deleteAttachment(
   const auth = await requirePermission("attachments:write");
   if (!auth.ok) return auth.error;
   const supabase = createClient();
-  const { error: storageErr } = await supabase.storage.from(BUCKET).remove([storagePath]);
-  const { error } = await supabase.from("reading_attachments").delete().eq("id", id);
+  const { data: deleted, error } = await supabase.from("reading_attachments").delete().eq("id", id).select("storage_path");
   if (error) return { ok: false, message: error.message };
+  if (!deleted?.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการของโรงงานนี้" };
+  const { error: storageErr } = await supabase.storage.from(BUCKET).remove([deleted[0].storage_path as string]);
   revalidatePath(`/assets/${assetId}`);
   if (storageErr) {
     console.error("[deleteAttachment] storage removal failed", storageErr);
@@ -131,6 +138,9 @@ export async function registerStandardAttachment(
   if (!auth.ok) return auth.error;
   const invalid = validateAttachment(input.fileName, input.mimeType, input.sizeBytes, MAX_DOC_ATTACHMENT_BYTES, DOC_ATTACHMENT_MIME_TYPES, DOC_ATTACHMENT_EXTENSIONS);
   if (invalid) return { ok: false, message: invalid };
+  if (!input.storagePath.startsWith(`${input.standardId}/`) || input.storagePath.includes("..")) {
+    return { ok: false, message: "ตำแหน่งไฟล์ไม่ตรงกับมาตรฐานนี้" };
+  }
   const supabase = createClient();
   const {
     data: { user },
@@ -174,9 +184,11 @@ export async function deleteStandardAttachment(
   const auth = await requirePermission("attachments:write");
   if (!auth.ok) return auth.error;
   const supabase = createClient();
-  const { error: storageErr } = await supabase.storage.from(STD_BUCKET).remove([storagePath]);
-  const { error } = await supabase.from("standard_attachments").delete().eq("id", id);
+  // delete the row first and remove the file it points to, not the path the browser sent
+  const { data: deleted, error } = await supabase.from("standard_attachments").delete().eq("id", id).select("storage_path");
   if (error) return { ok: false, message: error.message };
+  if (!deleted?.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการนี้" };
+  const { error: storageErr } = await supabase.storage.from(STD_BUCKET).remove([deleted[0].storage_path as string]);
   revalidatePath("/standards");
   if (storageErr) {
     console.error("[deleteStandardAttachment] storage removal failed", storageErr);

@@ -7,7 +7,8 @@ import { isDemoMode } from "@/lib/env";
 import { demoBlocked, runAction, type ActionResult } from "./result";
 import { logAudit } from "./audit-log";
 import { requirePermission } from "./guards";
-import { getAssetAlarmConfig, type AssetAlarmConfig } from "@/lib/queries/alarms";
+import { getAlarmConfig, getAssetAlarmConfig, type AssetAlarmConfig } from "@/lib/queries/alarms";
+import { WEIGHT_MSG, weightsOk } from "@/lib/validation";
 
 // Thin server-action wrapper so the client component can fetch a specific
 // asset's effective (merged) alarm config on demand (query functions aren't
@@ -46,6 +47,7 @@ export async function saveAlarmConfig(input: AlarmSaveInput): Promise<ActionResu
   const auth = await requirePermission("alarms:write");
   if (!auth.ok) return auth.error;
   if (!penaltiesInRange(input)) return { ok: false, message: PCT_MSG };
+  if (!weightsOk(input.scoreConfig.oil_weight, input.scoreConfig.vib_weight)) return { ok: false, message: WEIGHT_MSG };
 
   // RLS-enforced updates with the user's session (engineer/admin only).
   const supabase = createClient();
@@ -109,6 +111,12 @@ export async function saveAssetAlarmOverride(input: AssetAlarmSaveInput): Promis
     const auth = await requirePermission("alarms:write");
     if (!auth.ok) return auth.error;
     if (!penaltiesInRange(input)) return { ok: false, message: PCT_MSG };
+    const { oil_weight, vib_weight } = input.scoreConfig;
+    if (oil_weight != null || vib_weight != null) {
+      // one weight left empty uses the system-wide one: Oil 70 + global Vib 0 would cap the machine at 70
+      const { scoreConfig: base } = await getAlarmConfig();
+      if (!weightsOk(oil_weight, vib_weight, base)) return { ok: false, message: WEIGHT_MSG };
+    }
 
     const supabase = createClient();
     // The first failed write's message, or null. Upsert first, then delete the rows
@@ -173,6 +181,7 @@ export async function applyWeightToAllOverrides(oil_weight: number, vib_weight: 
   return runAction(async (): Promise<ActionResult> => {
     const auth = await requirePermission("alarms:write");
     if (!auth.ok) return auth.error;
+    if (!weightsOk(oil_weight, vib_weight)) return { ok: false, message: WEIGHT_MSG };
 
     const supabase = createClient();
     const { data: overrides, error: selErr } = await supabase.from("asset_score_overrides").select("asset_id");

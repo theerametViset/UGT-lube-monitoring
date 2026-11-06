@@ -4,7 +4,10 @@ const m = vi.hoisted(() => ({
   allowed: true,
   send: vi.fn(async (p: { to: string[] }) => ({ ok: true, message: `ส่งอีเมลไป ${p.to.length} ผู้รับ` })),
   user: 0,
+  seen: 569, // machines the caller may see (RLS)
+  total: 569,
 }));
+const counted = (n: () => number) => ({ from: () => ({ select: async () => ({ count: n(), error: null }) }) });
 
 vi.mock("@/lib/env", () => ({ isDemoMode: () => false, isLocalStore: () => false }));
 vi.mock("./guards", () => ({
@@ -12,8 +15,8 @@ vi.mock("./guards", () => ({
     m.allowed ? { ok: true, userId: `u${m.user}` } : { ok: false, error: { ok: false, message: "ไม่มีสิทธิ์" } },
 }));
 vi.mock("./audit-log", () => ({ logAudit: async () => {} }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: () => ({}) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: () => counted(() => m.seen) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => counted(() => m.total) }));
 vi.mock("@/lib/email/send", () => ({ sendEmail: m.send }));
 vi.mock("@/lib/email/weekly-digest-build", () => ({ buildWeeklyDigest: async () => ({ subject: "[UGT Lube] สรุปสัปดาห์", html: "<p>x</p>" }) }));
 vi.mock("@/lib/queries/notifications", () => ({
@@ -24,6 +27,7 @@ import { sendWeeklyDigestNow } from "./notifications";
 
 beforeEach(() => {
   m.allowed = true;
+  m.seen = 569;
   m.send.mockClear();
   m.user += 1; // fresh rate-limit bucket per test
 });
@@ -48,5 +52,13 @@ describe("sendWeeklyDigestNow", () => {
     expect(m.send).toHaveBeenLastCalledWith(expect.objectContaining({ to: ["r1@x.co", "r2@x.co"], subject: "[UGT Lube] สรุปสัปดาห์" }));
     expect((await sendWeeklyDigestNow({ test: false })).ok).toBe(false);
     expect(m.send).toHaveBeenCalledTimes(3);
+  });
+
+  it("someone limited to some plants can't send the fleet-wide email to everyone", async () => {
+    m.seen = 249; // TSL only
+    const res = await sendWeeklyDigestNow({ test: false });
+    expect(res.ok).toBe(false);
+    expect(m.send).not.toHaveBeenCalled();
+    expect((await sendWeeklyDigestNow({ test: true, to: "me@x.co" })).ok).toBe(true); // a test still works
   });
 });

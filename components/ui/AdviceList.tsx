@@ -1,27 +1,48 @@
-import { TriangleAlert } from "lucide-react";
+import { ArrowRight, TriangleAlert } from "lucide-react";
 import type { ActionReason } from "@/lib/scoring/advice";
 
-// The out-of-limit readings of one machine, each with its limit and next step, then the
-// notes. Same markup on the Dashboard's Action Required list and the Drill-down cause band.
-export function AdviceList({ reason }: { reason: Pick<ActionReason, "advice" | "notes"> }) {
+// The out-of-limit readings of one machine — one aligned line each (value · how far over ·
+// limit), then what to do, each step once — then the notes. Dashboard's Action Required list
+// (`compact`: only the worst reading's step) and the Drill-down cause band (every step).
+export function AdviceList({ reason, compact = false }: { reason: Pick<ActionReason, "advice" | "notes">; compact?: boolean }) {
+  // advice comes worst first; two readings with the same step show it once
+  const steps = [...new Set(reason.advice.map((r) => r.action))];
   return (
     <div className="space-y-1.5 text-[14px] text-t1">
-      {reason.advice.length ? reason.advice.map((r) => (
-        <div key={r.label}>
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-semibold">{r.label}</span>
-            <span className={`rounded px-1.5 text-[13px] font-semibold ${r.level === "crit" ? "bg-red/15 text-red" : "bg-yellow/15 text-yellow"}`}>{r.badge}</span>
-            {r.limit && <span className="text-[13px] text-t3">{r.limit}</span>}
+      {reason.advice.length ? (
+        <>
+          {/* phone: each reading wraps on its own; wider: one grid so the values line up */}
+          <div className="space-y-0.5 sm:grid sm:grid-cols-[0.5rem_auto_auto_1fr] sm:items-baseline sm:gap-x-2 sm:gap-y-0.5 sm:space-y-0">
+            {reason.advice.map((r) => {
+              const crit = r.level === "crit";
+              // the badge starts with the level word; the dot carries it, the screen reader still hears it
+              const over = r.badge.replace(/^(วิกฤต|เฝ้าระวัง)\s*/, "");
+              return (
+                <div key={r.label} className="flex flex-wrap items-baseline gap-x-2 sm:contents">
+                  <span aria-hidden className={`h-2 w-2 translate-y-[-1px] self-center rounded-full ${crit ? "bg-red" : "bg-yellow"}`} />
+                  <span className="whitespace-nowrap font-medium" title={[r.short, r.meaning].filter(Boolean).join(" — ") || undefined}>{r.label}</span>
+                  <span className={`whitespace-nowrap text-[13px] font-semibold ${crit ? "text-red" : "text-yellow"}`}>
+                    <span className="sr-only">{crit ? "วิกฤต " : "เฝ้าระวัง "}</span>
+                    {over || r.badge}
+                  </span>
+                  <span className="whitespace-nowrap text-[13px] text-t3">{r.limit ? `(${r.limit})` : ""}</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="text-t2" title={r.meaning ?? undefined}>
-            {r.short && <span className="text-t1">{r.short}: </span>}
-            {r.action}
-          </div>
-        </div>
-      )) : <span className="text-t3">ไม่มีผลตรวจที่เกินเกณฑ์</span>}
+          {(compact ? steps.slice(0, 1) : steps).map((s) => (
+            <div key={s} className="flex items-start gap-1.5 text-[13px] text-t2">
+              <ArrowRight className="mt-[3px] h-3.5 w-3.5 shrink-0 text-t3" aria-hidden />
+              <span>{s}</span>
+            </div>
+          ))}
+        </>
+      ) : (
+        <span className="text-t3">ไม่มีผลตรวจที่เกินเกณฑ์</span>
+      )}
       {reason.notes.map((n) => (
         <div key={n} className="flex items-start gap-1.5 text-[13px] text-t3">
-          <TriangleAlert className="mt-1 h-3 w-3 shrink-0 text-yellow" aria-hidden />{n}
+          <TriangleAlert className="mt-[3px] h-3.5 w-3.5 shrink-0 text-yellow" aria-hidden />{n}
         </div>
       ))}
     </div>

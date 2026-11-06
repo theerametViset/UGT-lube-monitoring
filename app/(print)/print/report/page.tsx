@@ -2,7 +2,7 @@ import { getDashboardData } from "@/lib/queries/assets";
 import { getAlarmConfig } from "@/lib/queries/alarms";
 import { ReportDoc, type ReportConfig } from "@/components/reports/ReportDoc";
 import { getActionReasons } from "@/lib/queries/action-reasons";
-import { reportActionAssets } from "@/lib/exec-summary-text";
+import { reportActionAssets, scopeReport } from "@/lib/exec-summary-text";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,8 @@ export default async function PrintReportPage({ searchParams }: PageProps) {
     getDashboardData(""),
     getAlarmConfig(),
   ]);
-  const reasons = await getActionReasons(reportActionAssets(data.scopedAssets));
+  // only the plant being printed: one plant needs at most 10 machines' causes, not every plant's
+  const reasons = await getActionReasons(reportActionAssets(scopeReport(data, config.site).scopedAssets));
 
   return (
     <div className="min-h-screen bg-bg py-6 print:min-h-0 print:py-0">

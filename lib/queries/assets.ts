@@ -7,7 +7,7 @@ import { isDemoMode } from "@/lib/env";
 import { getDemoAssets, getDemoReference } from "@/lib/demo-data";
 import type { Asset, AssetStatus, AssetType, Site } from "@/lib/types";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 export interface SiteAgg {
   code: string;
@@ -213,7 +213,9 @@ export async function getAssetsList(opts: {
   status?: AssetStatus | "";
   sort?: "" | "health_asc";
   page?: number;
+  pageSize?: number;
 }): Promise<AssetsListResult> {
+  const PAGE_SIZE = opts.pageSize ?? DEFAULT_PAGE_SIZE;
   const site = opts.site ?? "";
   const q = (opts.q ?? "").trim();
   const status = opts.status ?? "";
@@ -249,6 +251,8 @@ export async function getAssetsList(opts: {
   query = query.order(sort === "health_asc" ? "health" : "id", {
     ascending: sort === "health_asc",
   });
+  // many machines share a score (100): without a tiebreak a row can repeat or vanish between pages
+  if (sort === "health_asc") query = query.order("id");
   const start = (page - 1) * PAGE_SIZE;
   query = query.range(start, start + PAGE_SIZE - 1);
   const { data, count, error } = await query;

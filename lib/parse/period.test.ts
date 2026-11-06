@@ -36,6 +36,9 @@ describe("parseSamplingPeriod", () => {
     expect(parseSamplingPeriod("Jun 15")).toEqual({ period: "2015-06", ambiguous: true });
     expect(parseSamplingPeriod("15-Jun-26")?.ambiguous).toBe(false);
     expect(p("15 มิ.ย. 2569")).toBe("2026-06");
+    // year before the month: the day after it is not the year
+    expect(parseSamplingPeriod("2026-Jun-15")).toEqual({ period: "2026-06", ambiguous: false });
+    expect(p("2569 มิ.ย. 15")).toBe("2026-06");
   });
 
   it("rejects periods more than a month ahead", () => {

@@ -52,8 +52,9 @@ export async function deleteMaintenance(id: string, assetId: string): Promise<Ac
       .select("type,work_date,wo_no,description,parts,cost,technician")
       .eq("id", id)
       .maybeSingle();
-    const { error } = await supabase.from("maintenance_records").delete().eq("id", id);
+    const { data: deleted, error } = await supabase.from("maintenance_records").delete().eq("id", id).select("id");
     if (error) return { ok: false, message: error.message };
+    if (!deleted?.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการของโรงงานนี้" };
     await logAudit({ action: "DELETE", table_name: "maintenance_records", record_id: `${assetId}/maint/${id}`, old_value: before ?? undefined });
     revalidatePath(`/assets/${assetId}`);
     return { ok: true, message: "ลบรายการสำเร็จ" };

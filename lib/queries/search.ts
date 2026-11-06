@@ -31,7 +31,7 @@ export async function globalSearch(q: string): Promise<SearchResult[]> {
         type: "asset" as const,
         id: a.id,
         title: a.name,
-        subtitle: `${a.id} · ${a.type} · ${a.site} · ${a.health}%`,
+        subtitle: `${a.id} · ${a.type} · ${a.site} · Health ${a.health}`,
         href: `/assets/${a.id}`,
         health: a.health,
       }));
@@ -45,7 +45,7 @@ export async function globalSearch(q: string): Promise<SearchResult[]> {
     type: "asset",
     id: a.id,
     title: a.name,
-    subtitle: `${a.id} · ${a.type} · ${a.site} · ${a.health}%`,
+    subtitle: `${a.id} · ${a.type} · ${a.site} · Health ${a.health}`,
     href: `/assets/${a.id}`,
     health: a.health,
   }));

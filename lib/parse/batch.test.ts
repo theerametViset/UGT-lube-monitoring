@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { isoCodeIn, parseBatchExcel } from "./batch";
+import { isoCodeIn, oilHeaderParam, parseBatchExcel } from "./batch";
 import { parseLabExcel } from "./excel";
 import { parseSamplingPeriod } from "./period";
 
@@ -85,5 +85,40 @@ describe("lab Excel parsing", () => {
     expect(single.tag).toBe("06-K01-B");
     expect(parseSamplingPeriod(single.samplingDate)?.period).toBe("2026-07");
     expect(single.oil).toMatchObject({ visc: 61.7, tan: 0.3 });
+  });
+});
+
+describe("lab header → reading", () => {
+  it("whole words and numbers: 14µm is not 4µm, Tank is not TAN, a bare Fe is Fe", () => {
+    const map = (h: string) => oilHeaderParam(h.toLowerCase());
+    expect(map("Fe")).toBe("fe");
+    expect(map("Fe(ppm)")).toBe("fe");
+    expect(map("TAN (mgKOH/g)")).toBe("tan");
+    expect(map("Tank (L)")).toBeNull();
+    expect(map("Standard")).toBeNull();
+    expect(map("4\u00b5m")).toBe("particle_4"); // micro sign, as Excel types it
+    expect(map("6\u03bcm")).toBe("particle_6"); // Greek mu
+    expect(map("\u226514\u00b5m")).toBe("particle_14");
+    expect(map("14um")).toBe("particle_14");
+    expect(map(">4")).toBe("particle_4");
+    expect(map(">14")).toBe("particle_14");
+    expect(map("Viscosity (cSt@40°C)")).toBe("visc");
+  });
+
+  it("a whole file with those headers lands every value in its own reading", async () => {
+    const aoa: unknown[][] = [
+      ["TAG", "Fe", "TAN", "Tank (L)", "4\u00b5m", "6\u00b5m", "14\u00b5m"],
+      ["06-K01-B", 12, 0.4, 200, 1500, 400, 30],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    const buf: ArrayBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+    const file = { name: "h.xlsx", size: buf.byteLength, type: "", arrayBuffer: async () => buf } as unknown as File;
+    const [row] = await parseBatchExcel(file);
+    expect(row).toMatchObject({ fe: 12, tan: 0.4, particle_4: 1500, particle_6: 400, particle_14: 30 });
+    const single = await parseLabExcel(file);
+    expect(single.oil).toMatchObject({ fe: 12, tan: 0.4, particle_4: 1500, particle_6: 400, particle_14: 30 });
+    expect(single.vib).toEqual({});
   });
 });

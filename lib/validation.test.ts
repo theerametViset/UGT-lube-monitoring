@@ -4,6 +4,7 @@ import {
   StandardQuerySchema,
   SearchQuerySchema,
   CompareQuerySchema,
+  weightsOk,
 } from "./validation";
 
 describe("AssetIdSchema", () => {
@@ -51,5 +52,24 @@ describe("CompareQuerySchema", () => {
   });
   it("rejects an empty id", () => {
     expect(CompareQuerySchema.safeParse({ id: "" }).success).toBe(false);
+  });
+});
+
+describe("weightsOk", () => {
+  it("the weights in use must be 0–100 and add up to 100", () => {
+    expect(weightsOk(100, 0)).toBe(true);
+    expect(weightsOk(70, 30)).toBe(true);
+    expect(weightsOk(33.3, 66.7)).toBe(true);
+    expect(weightsOk(60, 60)).toBe(false);
+    expect(weightsOk(40, 40)).toBe(false);
+    expect(weightsOk(150, -50)).toBe(false);
+    expect(weightsOk(NaN, 100)).toBe(false);
+  });
+
+  it("an empty per-machine weight uses the system-wide one, as compute_health does", () => {
+    const base = { oil_weight: 100, vib_weight: 0 };
+    expect(weightsOk(70, null, base)).toBe(false); // 70 + 0
+    expect(weightsOk(null, 0, base)).toBe(true); // 100 + 0
+    expect(weightsOk(70, 30, base)).toBe(true);
   });
 });

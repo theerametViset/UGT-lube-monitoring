@@ -127,7 +127,14 @@ export function getLocalAudit(): LocalAuditRow[] {
 }
 
 export function appendLocalAudit(row: Omit<LocalAuditRow, "id" | "created_at">): void {
-  writeTable("audit_log", [...getLocalAudit(), { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }]);
+  appendLocalAuditMany([row]);
+}
+
+/** Several history rows in one write (a whole lab file), not one file rewrite per row. */
+export function appendLocalAuditMany(rows: Omit<LocalAuditRow, "id" | "created_at">[]): void {
+  if (!rows.length) return;
+  const at = new Date().toISOString();
+  writeTable("audit_log", [...getLocalAudit(), ...rows.map((r) => ({ ...r, id: crypto.randomUUID(), created_at: at }))]);
 }
 
 // Like the Supabase upsert: columns not in `row` keep their saved value (null on a new row).
@@ -137,12 +144,20 @@ const META = new Set(["asset_id", "period", "updated_at"]);
 const isBlank = (r: object) => Object.entries(r).every(([k, v]) => META.has(k) || v == null);
 
 export function upsertLocalOil(row: LocalKey & Partial<OilReading>): void {
-  const all = getLocalOil();
-  const old = all.find((r) => r.asset_id === row.asset_id && r.period === row.period);
-  const rows = all.filter((r) => r !== old);
-  const merged = { ...BLANK_OIL, ...old, ...row, updated_at: new Date().toISOString() };
-  if (!isBlank(merged)) rows.push(merged);
-  writeTable("oil_readings", rows);
+  upsertLocalOilMany([row]);
+}
+
+/** Many rows, one read and one write of the file — a 569-row lab file used to rewrite it 569 times. */
+export function upsertLocalOilMany(rows: (LocalKey & Partial<OilReading>)[]): void {
+  const key = (r: LocalKey) => `${r.asset_id}|${r.period}`;
+  const byKey = new Map(getLocalOil().map((r) => [key(r), r]));
+  const at = new Date().toISOString();
+  for (const row of rows) {
+    const merged = { ...BLANK_OIL, ...byKey.get(key(row)), ...row, updated_at: at };
+    if (isBlank(merged)) byKey.delete(key(row));
+    else byKey.set(key(row), merged);
+  }
+  writeTable("oil_readings", [...byKey.values()]);
 }
 
 export function upsertLocalVib(row: LocalKey & Partial<VibReading>): void {

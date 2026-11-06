@@ -7,6 +7,7 @@ import { demoBlocked, runAction, type ActionResult } from "./result";
 import { requirePermission } from "./guards";
 import { logAudit } from "./audit-log";
 import { MENU_HREFS } from "@/lib/nav";
+import { managersLeft } from "@/lib/queries/users";
 
 // role id is used as a Postgres text primary key AND referenced from
 // profiles.role — keep it a plain slug so it's safe in both places and in URLs.
@@ -89,18 +90,12 @@ export async function setRolePermissions(roleId: string, permissionKeys: string[
     // is_system protects roles from deletion (see deleteRole above and the
     // trg_prevent_system_role_delete DB trigger), but nothing else stops an
     // edit here from stripping users:manage off the last role that holds it.
-    if (!permissionKeys.includes("users:manage")) {
-      const { count } = await supabase
-        .from("role_permissions")
-        .select("role_id", { count: "exact", head: true })
-        .eq("permission_key", "users:manage")
-        .neq("role_id", roleId);
-      if (!count) {
-        return {
-          ok: false,
-          message: "ไม่สามารถถอดสิทธิ์ 'จัดการผู้ใช้ (users:manage)' ออกได้ — ต้องมีอย่างน้อย 1 Role ที่มีสิทธิ์นี้เสมอ มิฉะนั้นจะไม่มีใครเข้าหน้าจัดการ Role/ผู้ใช้ได้อีก",
-        };
-      }
+    // Counts people, not roles: an empty role holding users:manage would otherwise pass.
+    if (!permissionKeys.includes("users:manage") && (await managersLeft({ withoutRole: roleId })) === 0) {
+      return {
+        ok: false,
+        message: "ไม่สามารถถอดสิทธิ์ 'จัดการผู้ใช้ (users:manage)' ออกได้ — ต้องมีผู้ใช้อย่างน้อย 1 คนที่มีสิทธิ์นี้เสมอ มิฉะนั้นจะไม่มีใครเข้าหน้าจัดการ Role/ผู้ใช้ได้อีก",
+      };
     }
 
     // Add first, then remove what was unticked — no transaction here, so a failed

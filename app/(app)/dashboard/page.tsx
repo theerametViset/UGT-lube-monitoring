@@ -8,14 +8,14 @@ import type { Asset, AssetStatus } from "@/lib/types";
 import {
   Card,
   KpiCard,
-  HealthBar,
   HealthBadge,
-  StatusBadge,
   ButtonLink } from "@/components/ui/primitives";
 import { SiteReliabilityChart } from "@/components/charts/SiteReliabilityChart";
 import { RiskConcentrationChart } from "@/components/charts/RiskConcentrationChart";
 import { OilLevel } from "@/components/charts/OilLevel";
 import { formatNumber } from "@/lib/utils";
+import { healthColor, statusLabelTh } from "@/lib/scoring/health";
+import { readableText } from "@/lib/color";
 
 // Calculate aging: how long since last_update
 function getAging(lastUpdate: string | null): string {
@@ -63,6 +63,8 @@ function KpiLink({ href, active = false, title, children }: { href: string; acti
 
 export const dynamic = "force-dynamic";
 
+const FLEET_PAGE = 10; // rows per page of the fleet table — the whole page shows, no scroll box
+
 interface PageProps {
   searchParams: {
     site?: string;
@@ -99,7 +101,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const [{ data, reference }, table] = await Promise.all([
     getDashboardData(site),
-    getAssetsList({ site, q, status, sort: "", page }),
+    // worst first: the machines that need attention lead the table
+    getAssetsList({ site, q, status, sort: "health_asc", page, pageSize: FLEET_PAGE }),
   ]);
   const reasons = await getActionReasons(data.topCritical);
 
@@ -217,7 +220,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     </div>
                   </div>
                   <div className="col-start-2 md:col-start-auto">
-                    <AdviceList reason={why} />
+                    <AdviceList reason={why} compact />
                   </div>
                   <div className="col-start-2 flex flex-wrap gap-1.5 md:col-start-auto md:justify-end">
                     <ButtonLink href={`/assets/${encodeURIComponent(a.id)}`} size="xs">ดูรายละเอียด</ButtonLink>
@@ -312,38 +315,49 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             </form>
           </div>
 
-          {/* relative: contains the absolutely-positioned sr-only header, which otherwise widens the page on mobile */}
-          <div className="relative max-h-[260px] overflow-auto">
+          {/* relative: contains the absolutely-positioned row links; x-scroll only on narrow screens */}
+          <div className="relative overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-black/[0.015]">
                   <th scope="col" className="px-2.5 py-2 text-[13px] font-semibold text-t3">รหัส</th>
-                  <th scope="col" className="px-2.5 py-2 text-[13px] font-semibold text-t3">ชื่อเครื่อง</th>
-                  <th scope="col" className="px-2.5 py-2 text-[13px] font-semibold text-t3">โรงงาน</th>
-                  <th scope="col" className="px-2.5 py-2 text-[13px] font-semibold text-t3">สถานะ</th>
+                  <th scope="col" className="hidden px-2.5 py-2 text-[13px] font-semibold text-t3 md:table-cell">ชื่อเครื่อง</th>
+                  <th scope="col" className="hidden px-2.5 py-2 text-[13px] font-semibold text-t3 md:table-cell">โรงงาน</th>
+                  <th scope="col" className="hidden px-2.5 py-2 text-[13px] font-semibold text-t3 md:table-cell">ประเภท</th>
                   <th scope="col" className="px-2.5 py-2 text-[13px] font-semibold text-t3">คะแนน</th>
-                  <th scope="col" className="px-2.5 py-2 text-[13px] font-semibold text-t3">อัปเดตล่าสุด</th>
-                  <th scope="col" className="px-2.5 py-2"><span className="sr-only">ดูรายละเอียด</span></th>
+                  <th scope="col" className="hidden px-2.5 py-2 text-[13px] font-semibold text-t3 md:table-cell">ผลแล็บล่าสุด</th>
                 </tr>
               </thead>
               <tbody>
                 {table.rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-2.5 py-3.5 text-center text-t3">
+                    <td colSpan={6} className="px-2.5 py-3.5 text-center text-t3">
                       ไม่พบเครื่องที่ตรงกับเงื่อนไข
                     </td>
                   </tr>
                 ) : (
                   table.rows.map((a) => (
-                    <tr key={a.id} className="border-b border-black/[0.025] hover:bg-cyan/[0.025]">
-                      <td className="px-2.5 py-2 font-mono text-[14px] font-semibold text-cyan">{a.id}</td>
-                      <td className="px-2.5 py-2 text-[14px] font-medium">{a.name}</td>
-                      <td className="px-2.5 py-2 text-[14px] text-t2"><span className="inline-flex items-center gap-1"><Factory className="h-3 w-3" aria-hidden />{a.site}</span></td>
-                      <td className="px-2.5 py-2"><StatusBadge status={a.status} /></td>
-                      <td className="px-2.5 py-2"><HealthBar score={a.health} /></td>
-                      <td className="px-2.5 py-2 font-mono text-[13px] text-t3">{a.last_update}</td>
-                      <td className="px-2.5 py-2">
-                        <ButtonLink href={`/assets/${encodeURIComponent(a.id)}`} size="xs">ดูรายละเอียด</ButtonLink>
+                    // the id link stretches over the whole row: one link per row, the row is the click target
+                    <tr key={a.id} className="relative border-b border-black/[0.025] transition-colors hover:bg-cyan/[0.04] focus-within:bg-cyan/[0.04]">
+                      <td className="px-2.5 py-2 align-top font-mono text-[14px] font-semibold md:align-middle">
+                        <Link href={`/assets/${encodeURIComponent(a.id)}`} className="whitespace-nowrap text-cyan after:absolute after:inset-0 after:content-[''] hover:underline">{a.id}</Link>
+                        {/* phone: name, plant and type stack under the id instead of their own columns */}
+                        <div className="font-sans text-[13px] font-medium text-t1 md:hidden">{a.name}</div>
+                        <div className="font-sans text-[12px] font-normal text-t3 md:hidden">{a.site} · {a.type}</div>
+                      </td>
+                      <td className="hidden px-2.5 py-2 text-[14px] font-medium md:table-cell">{a.name}</td>
+                      <td className="hidden px-2.5 py-2 text-[14px] text-t2 md:table-cell">{a.site}</td>
+                      <td className="hidden px-2.5 py-2 text-[14px] text-t2 md:table-cell">{a.type}</td>
+                      <td className="whitespace-nowrap px-2.5 py-2 align-top text-[14px] md:align-middle">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: healthColor(a.health) }} />
+                          <b className="tabular-nums" style={{ color: readableText(healthColor(a.health)) }}>{a.health}</b>
+                          <span className="text-[13px] text-t3">{statusLabelTh(a.status)}</span>
+                        </span>
+                        <div className={`text-[12px] md:hidden ${getAgingColor(a.last_update)}`} title="ผลแล็บล่าสุด">{getAging(a.last_update)}</div>
+                      </td>
+                      <td className={`hidden whitespace-nowrap px-2.5 py-2 text-[13px] md:table-cell ${getAgingColor(a.last_update)}`} title={a.last_update ?? undefined}>
+                        {getAging(a.last_update)}
                       </td>
                     </tr>
                   ))
@@ -352,13 +366,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             </table>
           </div>
 
-          <div className="mt-2 flex items-center justify-between text-[13px] text-t3">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px] text-t3">
             <span>
               {table.total > 0
-                ? `แสดง ${(table.page - 1) * 20 + 1}–${Math.min(table.total, table.page * 20)} จาก ${formatNumber(table.total)} เครื่อง`
+                ? `แสดง ${(table.page - 1) * FLEET_PAGE + 1}–${Math.min(table.total, table.page * FLEET_PAGE)} จาก ${formatNumber(table.total)} เครื่อง · เรียงจากคะแนนต่ำสุด`
                 : "ไม่มีรายการ"}
             </span>
-            <span className="flex gap-1.5">
+            <span className="flex gap-1.5 whitespace-nowrap">
               <ButtonLink href={`${buildHref(base, { page: table.page - 1 })}#fleet`} size="xs" disabled={table.page <= 1}>‹ ก่อนหน้า</ButtonLink>
               <span className="self-center px-1">{table.page}/{table.pages}</span>
               <ButtonLink href={`${buildHref(base, { page: table.page + 1 })}#fleet`} size="xs" disabled={table.page>= table.pages}>ถัดไป ›</ButtonLink>

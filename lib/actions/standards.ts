@@ -109,8 +109,9 @@ export async function deleteStandard(id: string): Promise<ActionResult> {
     const auth = await requirePermission("standards:write");
     if (!auth.ok) return auth.error;
     const supabase = createClient();
-    const { error } = await supabase.from("standards").delete().eq("id", id);
+    const { data: deleted, error } = await supabase.from("standards").delete().eq("id", id).select("id");
     if (error) return { ok: false, message: error.message };
+    if (!deleted?.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการของโรงงานนี้" };
     await logAudit({ action: "DELETE", table_name: "standards", record_id: id });
     revalidatePath("/standards");
     return { ok: true, message: "ลบมาตรฐานแล้ว" };

@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { dateText, isoCodeIn } from "./batch";
+import { dateText, isoCodeIn, oilHeaderParam } from "./batch";
 import { cellNumber } from "./excel-utils";
 
 export interface ParsedLab {
@@ -15,19 +15,14 @@ export interface ParsedLab {
 }
 
 
-const KEYWORDS: { keys: string[]; param: string }[] = [
-  { keys: ["iron (fe)", "iron", "(fe)", "fe "], param: "fe" },
-  { keys: ["water content", "water", "moisture", "h2o"], param: "water" },
-  { keys: ["viscosity", "visc", "cst", "kinematic"], param: "visc" },
-  { keys: ["tan", "total acid", "acid number", "mgkoh"], param: "tan" },
-  { keys: ["particle 4", "particle4", "4\u03bcm", "4um", ">4"], param: "particle_4" },
-  { keys: ["particle 6", "particle6", "6\u03bcm", "6um", ">6"], param: "particle_6" },
-  { keys: ["particle 14", "particle14", "14\u03bcm", "14um", ">14"], param: "particle_14" },
-  { keys: ["velocity", "vel", "rms"], param: "vel" },
-  { keys: ["acceleration", "peak accel", "acc", "g-pk", "g pk"], param: "acc" },
-  { keys: ["crest factor", "crest", "cf "], param: "cf" },
-  { keys: ["bearing temp", "temperature", "temp"], param: "temp" },
+// Vibration headers, whole words like the oil ones (oilHeaderParam): "Oil level" is not velocity.
+const VIB_HEADERS: [string, RegExp][] = [
+  ["vel", /velocity|\bvel\b|\brms\b/],
+  ["acc", /acceleration|peak accel|\bacc\b|g-?\s?pk/],
+  ["cf", /crest|\bcf\b/],
+  ["temp", /temp/],
 ];
+const headerParam = (text: string) => oilHeaderParam(text) ?? VIB_HEADERS.find(([, re]) => re.test(text))?.[0] ?? null;
 
 const OIL_KEYS = new Set(["fe", "water", "visc", "tan", "particle_4", "particle_6", "particle_14"]);
 const VIB_KEYS = new Set(["vel", "acc", "cf", "temp"]);
@@ -70,16 +65,14 @@ export async function parseLabExcel(file: File): Promise<ParsedLab> {
         const cellText = String(row[c] ?? "").toLowerCase().trim();
         if (!cellText) continue;
         if (tagCol < 0 && (cellText === "tag" || cellText.includes("tag no"))) { tagCol = c; headerRow = r; }
-        if (tagCol < 0 && KEYWORDS.some(({ keys }) => keys.some((k) => cellText.includes(k)))) lastKeyRow = r;
+        const param = headerParam(cellText);
+        if (tagCol < 0 && param) lastKeyRow = r;
         if (isoCol < 0 && ISO_KEYS.some((k) => cellText.includes(k)) && !cellText.includes("vg")) isoCol = c;
         if (lubCol < 0 && (cellText.includes("lubrication") || cellText.includes("oil type") || cellText.includes("lub "))) lubCol = c;
         if (volCol < 0 && (cellText.includes("volume") || cellText.includes("liter") || cellText.includes("qty"))) volCol = c;
         if (gradeCol < 0 && (cellText.includes("grade") || cellText.includes("oil grade"))) gradeCol = c;
         if (dateCol < 0 && (cellText.includes("sampling") || cellText.includes("sample date"))) dateCol = c;
-        for (const { keys, param } of KEYWORDS) {
-          if (colMap.has(c)) break;
-          if (keys.some((k) => cellText.includes(k))) colMap.set(c, param);
-        }
+        if (param && !colMap.has(c)) colMap.set(c, param);
       }
     }
 

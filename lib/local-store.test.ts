@@ -95,3 +95,27 @@ describe("deleteLocalReading", () => {
     delete process.env.LOCAL_DATA_DIR;
   });
 });
+
+describe("upsertLocalOilMany", () => {
+  it("a whole file in one write keeps unsent columns and drops emptied rows", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    process.env.LOCAL_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ls-many-"));
+    const { upsertLocalOil, upsertLocalOilMany, getLocalOil, appendLocalAuditMany, getLocalAudit } = await import("./local-store");
+    upsertLocalOil({ asset_id: "A-1", period: "2026-09", fe: 10, tan: 0.4 });
+    upsertLocalOil({ asset_id: "B-1", period: "2026-09", fe: 5 });
+    upsertLocalOilMany([
+      { asset_id: "A-1", period: "2026-09", fe: 12 }, // TAN not in the file: kept
+      { asset_id: "B-1", period: "2026-09", fe: null }, // emptied: dropped
+      { asset_id: "C-1", period: "2026-09", visc: 46 },
+    ]);
+    appendLocalAuditMany([{ action: "UPSERT", table_name: "oil_readings", record_id: "A-1/2026-09", old_value: null, new_value: null }]);
+    const rows = getLocalOil();
+    expect(rows.find((r) => r.asset_id === "A-1")).toMatchObject({ fe: 12, tan: 0.4 });
+    expect(rows.some((r) => r.asset_id === "B-1")).toBe(false);
+    expect(rows.find((r) => r.asset_id === "C-1")?.visc).toBe(46);
+    expect(getLocalAudit()).toHaveLength(1);
+    delete process.env.LOCAL_DATA_DIR;
+  });
+});

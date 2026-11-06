@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { hasPermission } from "@/lib/queries/permissions";
 import { getAsset } from "@/lib/queries/assets";
 import { getLatestReadings } from "@/lib/queries/readings";
 import { getAlarmConfig } from "@/lib/queries/alarms";
@@ -17,6 +18,8 @@ const aiRateLimited = createRateLimiter(20, 15 * 60 * 1000);
 // POST { assetId } -> DiagnoseResult (+ _source: 'glm'|'openai'|'anthropic'|'fallback')
 export async function POST(request: NextRequest) {
   try {
+    // same permission as the page this belongs to: a hidden module must not answer through its API
+    if (!(await hasPermission("assets:read"))) return NextResponse.json({ error: "ไม่มีสิทธิ์ดูข้อมูลส่วนนี้" }, { status: 403 });
     const key = await rateKey(request);
     if (aiRateLimited(key)) {
       return NextResponse.json(

@@ -59,7 +59,9 @@ export function parseSamplingPeriod(raw: string | null | undefined): ParsedPerio
     // a 4-digit year wins over the day ("Jun 15, 2026" is 2026, not 2015); with
     // 2-digit years the year comes last ("Jun 15, 26" → 2026, "15-Jun-26" → 2026)
     const nums = t.slice(at + name.length).match(/\d+/g) ?? [];
-    const ys = nums.find((x) => x.length === 4) ?? nums[nums.length - 1];
+    // "2026-Jun-15": the year can sit before the month — a 4-digit number there beats the day after it
+    const yearBefore = t.slice(0, at).match(/\d{4}/)?.[0];
+    const ys = nums.find((x) => x.length === 4) ?? yearBefore ?? nums[nums.length - 1];
     // "Jun 15" / "Jun 26": one 2-digit number and no day before the month — a day or a
     // year? Read it as a year but flag it, so the user confirms the month.
     const unsure = ys?.length !== 4 && nums.length === 1 && !/\d/.test(t.slice(0, at));

@@ -62,12 +62,42 @@ async function getAssetScoreOverride(assetId: string, supabase?: SupabaseClient)
  * asset-level overrides applied on top, param-by-param / field-by-field. */
 // `base`: the global config, when the caller already loaded it for many assets.
 export async function getAssetAlarmConfig(assetId: string, base?: AlarmConfig, supabase?: SupabaseClient): Promise<AssetAlarmConfig> {
-  const [{ params, scoreConfig }, paramOverrides, scoreOverride] = await Promise.all([
+  const [cfg, paramOverrides, scoreOverride] = await Promise.all([
     base ?? getAlarmConfig(supabase),
     getAssetAlarmOverrides(assetId, supabase),
     getAssetScoreOverride(assetId, supabase),
   ]);
+  return mergeAssetConfig(cfg, paramOverrides, scoreOverride);
+}
 
+/** getAssetAlarmConfig for many assets: two queries for all of them, not two per asset. */
+export async function getAssetAlarmConfigs(assetIds: string[], base: AlarmConfig, supabase?: SupabaseClient): Promise<Map<string, AssetAlarmConfig>> {
+  const out = new Map<string, AssetAlarmConfig>();
+  if (isDemoMode()) {
+    for (const id of assetIds) out.set(id, mergeAssetConfig(base, getDemoAssetAlarmOverrides(id), getDemoAssetScoreOverride(id)));
+    return out;
+  }
+  if (!assetIds.length) return out;
+  supabase ??= createClient();
+  const [pRes, sRes] = await Promise.all([
+    supabase.from("asset_alarm_overrides").select("*").in("asset_id", assetIds),
+    supabase.from("asset_score_overrides").select("*").in("asset_id", assetIds),
+  ]);
+  if (pRes.error) throw new Error(pRes.error.message);
+  if (sRes.error) throw new Error(sRes.error.message);
+  const params = (pRes.data ?? []) as AssetAlarmOverride[];
+  const scores = (sRes.data ?? []) as AssetScoreOverride[];
+  for (const id of assetIds) {
+    out.set(id, mergeAssetConfig(base, params.filter((o) => o.asset_id === id), scores.find((o) => o.asset_id === id) ?? null));
+  }
+  return out;
+}
+
+function mergeAssetConfig(
+  { params, scoreConfig }: AlarmConfig,
+  paramOverrides: AssetAlarmOverride[],
+  scoreOverride: AssetScoreOverride | null,
+): AssetAlarmConfig {
   const mergedParams = params.map((p) => {
     const ov = paramOverrides.find((o) => o.category === p.category && o.key === p.key);
     if (!ov) return p;

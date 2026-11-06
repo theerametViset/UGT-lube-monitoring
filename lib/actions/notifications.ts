@@ -51,7 +51,7 @@ export async function saveNotificationConfig(input: NotificationConfigInput): Pr
 }
 
 // The email the Monday cron would send now — shown in the settings page, nothing is sent.
-// Built with the service-role client (whole fleet, like the cron) after the permission check.
+// Built with the caller's own client, so RLS shows only the plants they may see.
 export async function previewWeeklyDigest(): Promise<{ ok: boolean; message: string; subject?: string; html?: string }> {
   if (isDemoMode()) {
     if (!demoCan("notifications:manage")) return { ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (notifications:manage)" };
@@ -60,7 +60,7 @@ export async function previewWeeklyDigest(): Promise<{ ok: boolean; message: str
     if (!auth.ok) return auth.error;
   }
   try {
-    const email = await buildWeeklyDigest(isDemoMode() ? undefined : createAdminClient());
+    const email = await buildWeeklyDigest(isDemoMode() ? undefined : createClient());
     return { ok: true, message: "ok", ...email };
   } catch {
     return { ok: false, message: "สร้างตัวอย่างอีเมลไม่สำเร็จ" };
@@ -86,7 +86,21 @@ export async function sendWeeklyDigestNow(input: { test: boolean; to?: string })
       return { ok: false, message: input.test ? "ส่งทดสอบถี่เกินไป — รอ 1 ชั่วโมงแล้วลองใหม่" : "ส่งให้ผู้รับทั้งหมดได้ไม่เกิน 3 ครั้งต่อวัน" };
     }
 
-    const email = await buildWeeklyDigest(createAdminClient());
+    // A test is built from what the caller may see (RLS). Sending to every saved recipient is the
+    // cron's fleet-wide email, so only someone who can see every plant may trigger it.
+    const own = createClient();
+    if (!input.test) {
+      const admin = createAdminClient();
+      const [mine, all] = await Promise.all([
+        own.from("assets").select("id", { count: "exact", head: true }),
+        admin.from("assets").select("id", { count: "exact", head: true }),
+      ]);
+      if (mine.error || all.error) return { ok: false, message: "ตรวจสิทธิ์การเข้าถึงโรงงานไม่สำเร็จ" };
+      if ((mine.count ?? 0) < (all.count ?? 0)) {
+        return { ok: false, message: "ส่งให้ผู้รับทั้งหมดได้เฉพาะผู้ที่เข้าถึงทุกโรงงาน — ใช้ส่งทดสอบแทน" };
+      }
+    }
+    const email = await buildWeeklyDigest(input.test ? own : createAdminClient());
     const res = await sendEmail({
       to,
       from: cfg.from_email,

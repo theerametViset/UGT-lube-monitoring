@@ -91,8 +91,10 @@ export async function updateAsset(
   const patch = Object.fromEntries(EDITABLE.filter((k) => k in input).map((k) => [k, input[k]]));
   const supabase = createClient();
   const { data: before } = await supabase.from("assets").select(EDITABLE.join(",")).eq("id", id).maybeSingle();
-  const { error } = await supabase.from("assets").update(patch).eq("id", id);
+  // RLS hides another plant's machine: 0 rows change and no error comes back
+  const { data: updated, error } = await supabase.from("assets").update(patch).eq("id", id).select("id");
   if (error) return { ok: false, message: error.message };
+  if (!updated?.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการของโรงงานนี้" };
   // Viscosity is scored against the VG grade (0027), so a new grade moves the score.
   if ("vg_grade" in patch) {
     const { error: rpcErr } = await createAdminClient().rpc("compute_health", { p_asset_id: id });
@@ -119,8 +121,9 @@ export async function deleteAsset(id: string): Promise<ActionResult> {
   const auth = await requirePermission("assets:delete");
   if (!auth.ok) return auth.error;
   const supabase = createClient();
-  const { error } = await supabase.from("assets").delete().eq("id", id);
+  const { data: deleted, error } = await supabase.from("assets").delete().eq("id", id).select("id");
   if (error) return { ok: false, message: error.message };
+  if (!deleted?.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการของโรงงานนี้" };
   await logAudit({ action: "DELETE", table_name: "assets", record_id: id });
   revalidatePath("/assets");
   revalidatePath("/dashboard");
@@ -134,12 +137,15 @@ export async function deleteAssets(ids: string[]): Promise<ActionResult> {
   const auth = await requirePermission("assets:delete");
   if (!auth.ok) return auth.error;
   const supabase = createClient();
-  const { error } = await supabase.from("assets").delete().in("id", ids);
+  const { data: deleted, error } = await supabase.from("assets").delete().in("id", ids).select("id");
   if (error) return { ok: false, message: error.message };
-  await logAudit({ action: "DELETE", table_name: "assets", record_id: ids.join(",") });
+  const gone = (deleted ?? []).map((r) => r.id as string);
+  if (!gone.length) return { ok: false, message: "ไม่พบรายการนี้ หรือไม่มีสิทธิ์แก้ไขรายการของโรงงานนี้" };
+  await logAudit({ action: "DELETE", table_name: "assets", record_id: gone.join(",") });
   revalidatePath("/assets");
   revalidatePath("/dashboard");
-  return { ok: true, message: `ลบ ${ids.length} รายการสำเร็จ` };
+  const skipped = ids.length - gone.length;
+  return { ok: true, message: `ลบ ${gone.length} รายการสำเร็จ${skipped ? ` (ข้าม ${skipped} รายการที่ไม่มีสิทธิ์หรือไม่พบ)` : ""}` };
   });
 }
 

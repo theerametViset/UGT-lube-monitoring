@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { hasPermission } from "@/lib/queries/permissions";
 import { getStandard } from "@/lib/queries/standards";
 import { generateStandardResult } from "@/lib/ai/standard";
 import { createRateLimiter, rateKey } from "@/lib/ai/rate-limit";
@@ -12,6 +13,8 @@ const standardRateLimited = createRateLimiter(20, 15 * 60 * 1000);
 // POST { id, question? } -> { analysis, source }
 export async function POST(request: NextRequest) {
   try {
+    // same permission as the page this belongs to: a hidden module must not answer through its API
+    if (!(await hasPermission("standards:read"))) return NextResponse.json({ error: "ไม่มีสิทธิ์ดูข้อมูลส่วนนี้" }, { status: 403 });
     const key = await rateKey(request);
     if (standardRateLimited(key)) {
       return NextResponse.json(

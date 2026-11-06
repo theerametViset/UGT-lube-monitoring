@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode, isLocalStore } from "@/lib/env";
-import { deleteLocalReading, getLocalOil, getLocalVib, upsertLocalOil, upsertLocalVib } from "@/lib/local-store";
+import { appendLocalAuditMany, deleteLocalReading, getLocalOil, getLocalVib, upsertLocalOil, upsertLocalOilMany, upsertLocalVib } from "@/lib/local-store";
 import { getDemoOilHistory, isDemoAssetId } from "@/lib/demo-data";
 import { isFuturePeriod, isPeriod } from "@/lib/parse/period";
 import { STORED_COLS, readingCols } from "@/lib/reading-fields";
@@ -164,14 +164,39 @@ export async function saveOilBatch(rows: OilBatchRow[]): Promise<BatchResult> {
   if (isLocalStore() && !demoCan("readings:write")) return { ok: false, message: "ไม่มีสิทธิ์ดำเนินการนี้ (readings:write)" };
   if (isLocalStore()) {
     return runAction(async (): Promise<BatchResult> => {
+      // Same checks as saveReadingLocal, then one file write for the readings and one for the history.
       const failedKeys: string[] = [];
       const failed: string[] = [];
+      const fail = (r: OilBatchRow, why: string) => { failedKeys.push(batchKey(r.assetId, r.period)); failed.push(`${r.assetId} (${r.period}): ${why}`); };
+      const saved = new Map(getLocalOil().map((o) => [batchKey(o.asset_id, o.period), o as unknown as Record<string, unknown>]));
+      const upserts: ({ asset_id: string; period: string } & Record<string, number | string | null>)[] = [];
+      const history: Parameters<typeof appendLocalAuditMany>[0] = [];
       for (const r of rows) {
-        const res = await saveReadingLocal({ ...r, kind: "oil" });
-        if (!res.ok) { failedKeys.push(batchKey(r.assetId, r.period)); failed.push(`${r.assetId} (${r.period}): ${res.message}`); }
+        if (!isPeriod(r.period) || !r.assetId) { fail(r, "ข้อมูลไม่ครบ (เครื่องจักร / งวด)"); continue; }
+        if (isFuturePeriod(r.period)) { fail(r, `งวด ${r.period} อยู่ในอนาคต — ตรวจวันที่เก็บตัวอย่าง`); continue; }
+        if (!isDemoAssetId(r.assetId)) { fail(r, `ไม่พบเครื่องจักร "${r.assetId}" ในระบบ — เพิ่มในฐานข้อมูลเครื่องจักรก่อน`); continue; }
+        const cols = readingCols({ kind: "oil", values: r.values });
+        if (!Object.keys(cols).length) continue;
+        const old = saved.get(batchKey(r.assetId, r.period));
+        upserts.push({ asset_id: r.assetId, period: r.period, ...cols });
+        history.push({
+          action: "UPSERT",
+          table_name: "oil_readings",
+          record_id: `${r.assetId}/${r.period}`,
+          old_value: old ? Object.fromEntries(Object.keys(cols).map((k) => [k, old[k] ?? null])) : null,
+          new_value: cols,
+        });
       }
-      const saved = rows.length - failed.length;
-      return { ok: failed.length === 0, saved, failedKeys, failed, message: `บันทึกในเครื่อง ${saved} รายการ` };
+      upsertLocalOilMany(upserts);
+      try {
+        appendLocalAuditMany(history);
+      } catch {
+        // history must never block the save (same as logAudit)
+      }
+      revalidatePath("/dashboard");
+      revalidatePath("/assets", "layout");
+      const n = rows.length - failed.length;
+      return { ok: failed.length === 0, saved: n, failedKeys, failed, message: `บันทึกในเครื่อง ${n} รายการ` };
     });
   }
   if (isDemoMode()) return demoBlocked();

@@ -6,7 +6,7 @@ import { isDemoMode } from "@/lib/env";
 import { demoBlocked, runAction, type ActionResult } from "./result";
 import { requirePermission } from "./guards";
 import { logAudit } from "./audit-log";
-import { listUsers, type UserRow } from "@/lib/queries/users";
+import { listUsers, managersLeft, type UserRow } from "@/lib/queries/users";
 
 // Client-callable snapshot for the "ดาวน์โหลด Excel" button — listUsers()
 // itself already requires users:manage, so no separate guard needed here.
@@ -25,6 +25,15 @@ export async function updateUserRole(
     const auth = await requirePermission("users:manage");
     if (!auth.ok) return auth.error;
     const admin = createAdminClient();
+    // moving someone to a role without users:manage must leave somebody who still has it
+    const { count: keeps } = await admin
+      .from("role_permissions")
+      .select("role_id", { count: "exact", head: true })
+      .eq("role_id", role)
+      .eq("permission_key", "users:manage");
+    if (!keeps && (await managersLeft({ withoutUser: userId })) === 0) {
+      return { ok: false, message: "ต้องมีผู้ใช้อย่างน้อย 1 คนที่จัดการผู้ใช้ได้ (users:manage) เสมอ มิฉะนั้นจะไม่มีใครเข้าหน้าจัดการ Role/ผู้ใช้ได้อีก" };
+    }
     const { error } = await admin
       .from("profiles")
       .update({ role, site_access: siteAccess })
