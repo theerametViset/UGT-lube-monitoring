@@ -1,22 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { ChartColumn, CircleCheck, Clock, FileChartColumn, FileText, Lightbulb, Lock, Mail, Printer, Settings, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChartColumn, CircleCheck, Clock, FileChartColumn, FileText, Mail, PenLine, Printer, RotateCcw, Settings, TrendingUp, TriangleAlert } from "lucide-react";
 import { Card, Button } from "@/components/ui/primitives";
-import { GearSpinner } from "@/components/ui/LubeIcons";
-import { ReportDoc, type ReportConfig } from "@/components/reports/ReportDoc";
-import { sendExecSummaryEmail } from "@/lib/actions/reports";
+import { REPORT_EDITS_KEY, ReportDoc, type ReportConfig } from "@/components/reports/ReportDoc";
+import { logReportEdits, sendReportEmail } from "@/lib/actions/reports";
+import { reportSlots, reportTexts, scopeReport, type ReportEdits } from "@/lib/exec-summary-text";
 import { formatThaiDateTime } from "@/lib/format";
 import type { DashboardData } from "@/lib/queries/assets";
 import type { AlarmConfig } from "@/lib/queries/alarms";
 import type { Site } from "@/lib/types";
-
-const SOURCE_LABEL: Record<string, string> = {
-  glm: "GLM",
-  openai: "OpenAI",
-  anthropic: "Claude",
-  fallback: "Rule-based (ไม่มี AI key)",
-};
+import type { ActionReason } from "@/lib/scoring/advice";
 
 const INP =
   "w-full rounded-lg border border-border bg-bg2 px-2.5 py-1.5 text-[14px] outline-none focus:border-cyan";
@@ -33,29 +27,38 @@ export function ReportsClient({
   data,
   sites,
   alarm,
+  reasons,
   canSendEmail = false,
+  canEdit = false,
 }: {
   data: DashboardData;
   sites: Site[];
   alarm: AlarmConfig;
+  reasons: Record<string, ActionReason>;
   canSendEmail?: boolean;
+  /** reports:edit — may reword the narrative (numbers stay locked). */
+  canEdit?: boolean;
 }) {
   const [site, setSite] = useState("");
-  const [period, setPeriod] = useState("ytd");
+  const period = "ytd"; // no period filter yet: reports show the latest state (kept for print-link compatibility)
   const [type, setType] = useState<ReportConfig["type"]>("board");
-  const [prepared, setPrepared] = useState("Senior Reliability Engineer");
+  const [prepared, setPrepared] = useState("Reliability Engineer");
   const [reviewed, setReviewed] = useState("Maintenance Manager");
   const [approved, setApproved] = useState("Plant Manager");
   const [generated, setGenerated] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [aiSummary, setAiSummary] = useState("");
-  const [aiSource, setAiSource] = useState<string | null>(null);
-  const [aiBusy, setAiBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [edits, setEdits] = useState<ReportEdits>({});
+  const [editOpen, setEditOpen] = useState(false);
+  // the generated text of every editable part, for the panel's starting values
+  const slots = useMemo(() => reportSlots(reportTexts(scopeReport(data, site), site, reasons)), [data, site, reasons]);
+  const editCount = slots.filter((s) => edits[s.key]?.trim()).length;
+  const [emailOpen, setEmailOpen] = useState(false);
   const [recipient, setRecipient] = useState("");
   const [emailStatus, setEmailStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
 
-  const config: ReportConfig = { type, period, site, prepared, reviewed, approved };
+  const config: ReportConfig = { type, period, site, prepared, reviewed, approved, note };
 
   function buildPrintUrl() {
     const p = new URLSearchParams();
@@ -65,39 +68,17 @@ export function ReportsClient({
     p.set("prepared", prepared);
     p.set("reviewed", reviewed);
     p.set("approved", approved);
-    if (aiSummary) {
-      p.set("summary", aiSummary);
-      if (aiSource) p.set("summarySource", aiSource);
-    }
+    if (note.trim()) p.set("note", note.trim());
     return `/print/report?${p.toString()}`;
   }
 
-  async function genSummary() {
-    setAiBusy(true);
-    setEmailStatus(null);
-    try {
-      const res = await fetch("/api/ai/exec-summary", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "เกิดข้อผิดพลาด");
-      setAiSummary(data.summary);
-      setAiSource(data.source);
-    } catch (e) {
-      setEmailStatus({ ok: false, text: "เกิดข้อผิดพลาดในการสร้างสรุป" });
-    } finally {
-      setAiBusy(false);
-    }
-  }
-
-  async function sendReportEmail() {
-    if (emailBusy || !aiSummary.trim()) return;
+  async function sendEmail() {
+    if (emailBusy) return;
     setEmailBusy(true);
     setEmailStatus(null);
     try {
-      const res = await sendExecSummaryEmail({
-        to: recipient,
-        summary: aiSummary,
-        source: aiSource ?? undefined,
-      });
+      // the server rebuilds the summary for this plant and report type
+      const res = await sendReportEmail({ to: recipient, site, type, note, edits: canEdit ? edits : undefined });
       setEmailStatus({ ok: res.ok, text: res.message });
     } finally {
       setEmailBusy(false);
@@ -121,110 +102,80 @@ export function ReportsClient({
             <div className="text-[14px] text-t2">สร้างรายงานมืออาชีพ A4 — เปิดหน้าพิมพ์แล้ว Save as PDF</div>
           </div>
           {generated && (
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() =>
-                // No noopener: the print page needs window.opener to know it was
-                // opened as a real popup and may auto-print (embedded previews
-                // fall back to same-tab + manual toolbar button).
-                window.open(buildPrintUrl(), "_blank")
-              }
-            >
-              <Printer className="h-3.5 w-3.5" aria-hidden />เปิดหน้าพิมพ์ / Save as PDF
-            </Button>
-          )}
-        </div>
-      </Card>
-
-      {/* AI Executive Summary */}
-      <Card className="border-cyan/25">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="flex items-center gap-1.5 font-sans text-[18px] max-sm:text-[16px] font-semibold"><Sparkles className="h-4 w-4" aria-hidden />AI สรุปรายงานอัตโนมัติ (Auto Executive Summary)</h2>
-            <div className="text-[14px] text-t2">
-              AI เขียนบทสรุปผู้บริหารจากข้อมูล KPI จริง — แก้ไขได้ แล้วส่งเข้า PDF หรืออีเมล
-            </div>
-          </div>
-          <Button size="sm" variant="primary" onClick={genSummary} disabled={aiBusy}>
-            {aiBusy ? <><GearSpinner className="h-3.5 w-3.5" />กำลังวิเคราะห์…</> : <><Sparkles className="h-3.5 w-3.5" aria-hidden />{aiSummary ? "สร้างใหม่" : "AI สรุปอัตโนมัติ"}</>}
-          </Button>
-        </div>
-
-        {aiSummary && (
-          <div className="mt-3 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-bold text-t3">บทสรุปจาก AI</span>
-              {aiSource && (
-                <span className="rounded-pill border border-cyan/30 bg-cyan/5 px-1.5 py-0.5 text-[14px] font-medium text-cyan">
-                  {SOURCE_LABEL[aiSource] ?? aiSource}
-                </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => {
+                  // the print tab reads the edits from here (too long for the URL)
+                  try {
+                    localStorage.setItem(REPORT_EDITS_KEY, JSON.stringify({ site, type, edits: canEdit ? edits : {}, at: Date.now() }));
+                  } catch {
+                    // storage blocked: the print shows the generated text
+                  }
+                  if (canEdit && editCount) void logReportEdits({ site, type, edits });
+                  // No noopener: the print page needs window.opener to know it was
+                  // opened as a real popup and may auto-print (embedded previews
+                  // fall back to same-tab + manual toolbar button).
+                  window.open(buildPrintUrl(), "_blank");
+                }}
+              >
+                <Printer className="h-3.5 w-3.5" aria-hidden />เปิดหน้าพิมพ์ / Save as PDF
+              </Button>
+              {canSendEmail && (
+                <Button size="sm" onClick={() => setEmailOpen((o) => !o)} aria-expanded={emailOpen}>
+                  <Mail className="h-3.5 w-3.5" aria-hidden />ส่งอีเมล
+                </Button>
               )}
             </div>
-            <textarea
-              value={aiSummary}
-              onChange={(e) => setAiSummary(e.target.value)}
-              rows={8}
-              className="w-full rounded-lg border border-border bg-bg2 px-2.5 py-2 text-[14px] leading-relaxed outline-none focus:border-cyan"
-            />
-            {canSendEmail ? (
-              <>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-[220px] flex-1">
-                    <span className="mb-1 block text-[13px] font-bold text-t3">
-                      ส่งอีเมลถึง (คั่นด้วย , หรือ ; สูงสุด 5 ราย)
-                    </span>
-                    <input
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      placeholder="manager@company.com, engineer@company.com"
-                      className="w-full rounded-lg border border-border bg-bg2 px-2.5 py-1.5 text-[14px] outline-none focus:border-cyan"
-                    />
-                  </div>
-                  <Button size="sm" variant="primary" onClick={sendReportEmail} disabled={emailBusy || !recipient.trim()}>
-                    {emailBusy ? "กำลังส่ง…" : <><Mail className="h-3.5 w-3.5" aria-hidden />ส่งอีเมล</>}
-                  </Button>
-                </div>
-                {emailStatus && (
-                  <div className={`flex items-center gap-1.5 text-[14px] ${emailStatus.ok ? "text-green" : "text-yellow"}`}>
-                    {emailStatus.ok ? <CircleCheck className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-                    <span className="text-t1">{emailStatus.text}</span>
-                  </div>
-                )}
-                <div className="text-[13px] text-t3">
-                  <Lightbulb className="mr-1 inline h-3.5 w-3.5 align-[-2px]" aria-hidden />บทสรุปนี้จะถูกใช้ในรายงาน (Preview + หน้าพิมพ์) แทนย่อหน้าสรุปมาตรฐาน
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-1.5 text-[13px] text-t3"><Lock className="h-3.5 w-3.5" aria-hidden />ไม่มีสิทธิ์ส่งรายงานทางอีเมล</div>
+          )}
+        </div>
+        {generated && canSendEmail && emailOpen && (
+          <div className="mt-3 space-y-2 border-t border-border pt-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[220px] flex-1">
+                <span className="mb-1 block text-[13px] font-bold text-t3">ส่งถึง (คั่นด้วย , หรือ ; สูงสุด 5 ราย)</span>
+                <input
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  placeholder="manager@company.com, engineer@company.com"
+                  className={INP}
+                />
+              </label>
+              <Button size="sm" variant="primary" onClick={sendEmail} disabled={emailBusy || !recipient.trim()}>
+                {emailBusy ? "กำลังส่ง…" : <><Mail className="h-3.5 w-3.5" aria-hidden />ส่ง</>}
+              </Button>
+            </div>
+            <div className="text-[13px] text-t3">
+              ส่งบทสรุปของรายงานนี้ ({site ? `โรงงาน ${site}` : "ทุกโรงงาน"}) พร้อมผลการประเมินและหมายเหตุ ถ้าต้องการไฟล์ PDF ให้แนบจากหน้าพิมพ์
+            </div>
+            {emailStatus && (
+              <div className={`flex items-center gap-1.5 text-[14px] ${emailStatus.ok ? "text-green" : "text-yellow"}`}>
+                {emailStatus.ok ? <CircleCheck className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+                <span className="text-t1">{emailStatus.text}</span>
+              </div>
             )}
           </div>
         )}
       </Card>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[360px_1fr]">
+        <div className="space-y-3">
         {/* Config */}
         <Card>
           <div className="space-y-2.5">
             <Field label="เลือกโรงงาน (Site)">
-              <select value={site} onChange={(e) => setSite(e.target.value)} className={INP}>
+              <select value={site} onChange={(e) => { setSite(e.target.value); setEdits({}); }} className={INP}>
                 <option value="">ทุกโรงงาน (All Sites)</option>
                 {sites.map((s) => <option key={s.code} value={s.code}>{s.code}</option>)}
-              </select>
-            </Field>
-            <Field label="ช่วงเวลารายงาน (Period)">
-              <select value={period} onChange={(e) => setPeriod(e.target.value)} className={INP}>
-                <option value="monthly">รายเดือน</option>
-                <option value="quarterly">รายไตรมาส</option>
-                <option value="ytd">สะสมตั้งแต่ต้นปี (YTD)</option>
               </select>
             </Field>
             <Field label="ประเภทรายงาน (Report type)">
               <div className="space-y-1.5">
                 {([
-                  ["board", "Full Board Report", "รายงานฉบับสมบูรณ์ — ครบทุกส่วน", ChartColumn],
-                  ["exec", "Executive Summary", "บทสรุปผู้บริหาร + KPI", TrendingUp],
-                  ["tech", "Technical Deep-Dive", "เจาะลึก + Risk Concentration + Methodology", Settings],
+                  ["exec", "Executive Summary", "ผู้บริหาร — ผลการประเมิน, บทสรุป, KPI, เปรียบเทียบรายโรงงาน", TrendingUp],
+                  ["board", "Plant Report", "ผู้จัดการโรงงาน — เทียบรายโรงงาน, ประเภทเครื่อง, เครื่องต้องดำเนินการพร้อมสาเหตุ", ChartColumn],
+                  ["tech", "Oil Analysis Technical Report", "วิศวกร — ค่าที่วัดได้เทียบเกณฑ์รายเครื่อง, สิ่งที่ควรทำ, เกณฑ์ให้คะแนน", Settings],
                 ] as const).map(([v, t, d, Icon]) => (
                   <button
                     key={v}
@@ -243,9 +194,81 @@ export function ReportsClient({
               <Field label="ผู้ทบทวน (Reviewed by)"><input value={reviewed} onChange={(e) => setReviewed(e.target.value)} className={INP} /></Field>
               <Field label="ผู้อนุมัติ (Approved by)"><input value={approved} onChange={(e) => setApproved(e.target.value)} className={INP} /></Field>
             </div>
+            <Field label="หมายเหตุผู้จัดทำ (ไม่บังคับ)">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value.slice(0, 500))}
+                rows={2}
+                placeholder="เช่น TSL หยุดซ่อมบำรุงสัปดาห์หน้า"
+                className={INP}
+              />
+            </Field>
             <Button variant="primary" onClick={generate} className="w-full justify-center py-2.5"><FileText className="h-3.5 w-3.5" aria-hidden />สร้างตัวอย่างรายงาน (Generate Preview)</Button>
           </div>
         </Card>
+
+        {/* Reword the narrative: numbers, verdict and tables are not slots, so they stay locked */}
+        {generated && canEdit && (
+          <Card>
+            <button
+              type="button"
+              onClick={() => setEditOpen((o) => !o)}
+              aria-expanded={editOpen}
+              className="flex w-full items-center justify-between gap-2 text-left"
+            >
+              <span className="flex items-center gap-1.5 text-[15px] font-semibold"><PenLine className="h-4 w-4" aria-hidden />แก้ไขข้อความรายงาน</span>
+              <span className="text-[13px] text-t3">{editCount ? `แก้ไขแล้ว ${editCount} จุด` : "ยังไม่แก้"} {editOpen ? "▴" : "▾"}</span>
+            </button>
+            {editOpen && (
+              <div className="mt-3 space-y-3">
+                <div className="text-[13px] text-t3">
+                  แก้ได้เฉพาะข้อความ ตัวเลข ผลการประเมิน และตารางล็อกไว้ ข้อความที่แก้ใช้ทั้งในพรีวิว หน้าพิมพ์ และอีเมล และบันทึกใน Audit
+                </div>
+                {slots.map((slot) => {
+                  const changed = !!edits[slot.key]?.trim();
+                  return (
+                    <label key={slot.key} className="block">
+                      <span className="mb-1 flex items-center justify-between gap-2 text-[13px] font-bold text-t3">
+                        <span>{slot.label}</span>
+                        {changed && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="rounded-pill bg-cyan/10 px-1.5 text-[12px] font-semibold text-cyan">แก้ไขแล้ว</span>
+                            <button
+                              type="button"
+                              onClick={() => setEdits(({ [slot.key]: _, ...rest }) => rest)}
+                              className="flex items-center gap-0.5 text-[12px] font-medium text-t3 hover:text-cyan"
+                            >
+                              <RotateCcw className="h-3 w-3" aria-hidden />คืนค่า
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                      <textarea
+                        value={edits[slot.key] ?? slot.text}
+                        onChange={(e) =>
+                          setEdits((prev) => {
+                            const v = e.target.value.slice(0, 1000);
+                            const { [slot.key]: _, ...rest } = prev;
+                            // typing the generated text back counts as no edit
+                            return v.trim() === slot.text ? rest : { ...rest, [slot.key]: v };
+                          })
+                        }
+                        rows={slot.text.length > 90 ? 3 : 2}
+                        className={INP}
+                      />
+                    </label>
+                  );
+                })}
+                {editCount > 0 && (
+                  <Button size="sm" onClick={() => setEdits({})}>
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />คืนค่าข้อความระบบทั้งหมด
+                  </Button>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
+        </div>
 
         {/* Preview */}
         <div className="min-w-0">
@@ -265,8 +288,8 @@ export function ReportsClient({
                 data={data}
                 alarm={alarm}
                 config={config}
-                execSummaryOverride={aiSummary || undefined}
-                execSummarySource={aiSource ?? undefined}
+                reasons={reasons}
+                edits={canEdit ? edits : {}}
               />
             </div>
           )}

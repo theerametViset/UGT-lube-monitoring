@@ -2,9 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* .follow-theme: popovers opened from the always-dark topbar get the page's theme back */
+/* .follow-theme: popovers opened from the always-dark topbar get the page's theme back.
+   .report-doc: the report is white paper in both themes, so it keeps the light text colours. */
 :root,
-html:not([data-theme="dark"]) .follow-theme {
+html:not([data-theme="dark"]) .follow-theme,
+.report-doc {
   /* Inter has no Thai glyphs: Thai characters fall through to IBM Plex Sans
      Thai (a matching humanist sans) instead of whatever the OS provides. */
   --font-inter: "Inter", "IBM Plex Sans Thai", -apple-system, BlinkMacSystemFont,
@@ -240,7 +242,7 @@ body {
     size: A4;
     margin: 14mm;
     @bottom-right {
-      content: "Page " counter(page) " / " counter(pages);
+      content: "หน้า " counter(page) "/" counter(pages);
       font-size: 9px;
       color: #7a7a7a;
     }

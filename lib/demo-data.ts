@@ -1194,6 +1194,7 @@ const DEMO_PERMISSIONS: Permission[] = [
   { key: "standards:write", label: "สร้าง / แก้ไข / ลบมาตรฐาน", category: "มาตรฐาน" },
   { key: "reports:view", label: "มองเห็นเมนู รายงานผู้บริหาร", category: "รายงาน" },
   { key: "reports:send_email", label: "ส่งรายงานทางอีเมล", category: "รายงาน" },
+  { key: "reports:edit", label: "แก้ไขข้อความในรายงาน", category: "รายงาน" },
   { key: "reports:read_all", label: "ดูรายงานของทุกคน", category: "รายงาน" },
 ];
 
@@ -1222,7 +1223,7 @@ const DEMO_ROLE_PERMISSIONS: Record<string, string[]> = {
     "alarms:write", "readings:write", "maintenance:write",
     "attachments:write", "attachments:read",
     "standards:write",
-    "reports:send_email", "sites:manage", "notifications:manage",
+    "reports:send_email", "reports:edit", "sites:manage", "notifications:manage",
     "audit:read",
   ],
   manager: [...VIEW_PERMS, "attachments:read", "maintenance:write", "audit:read"],

@@ -513,10 +513,10 @@ export function AlarmClient({
                     <ViscGradeLimits />
                   ) : (
                     <>
-                      <label className="block"><span className="mb-1 block text-[13px] font-bold text-yellow">Warn ≥</span>
+                      <label className="block"><span className="mb-1 block text-[13px] font-bold text-yellow">Warn &gt;</span>
                         <input type="number" step="0.1" value={p.warn_limit ?? ""} onChange={(e) => setLimit(p.id, "warn_limit", e.target.value)} onBlur={commitAndReaudit} className={INP} />
                       </label>
-                      <label className="block"><span className="mb-1 block text-[13px] font-bold text-red">Crit ≥</span>
+                      <label className="block"><span className="mb-1 block text-[13px] font-bold text-red">Crit &gt;</span>
                         <input type="number" step="0.1" value={p.crit_limit ?? ""} onChange={(e) => setLimit(p.id, "crit_limit", e.target.value)} onBlur={commitAndReaudit} className={INP} />
                       </label>
                     </>
@@ -543,10 +543,10 @@ export function AlarmClient({
                 <div className="flex items-center justify-between"><span className="text-[14px] font-semibold">{p.name}</span><span className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[13px] text-t3">{p.unit}</span></div>
                 <StandardsChips standards={standardsByParam?.[p.key]} />
                 <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  <label className="block"><span className="mb-1 block text-[13px] font-bold text-yellow">Warn ≥</span>
+                  <label className="block"><span className="mb-1 block text-[13px] font-bold text-yellow">Warn &gt;</span>
                     <input type="number" step="0.1" value={p.warn_limit ?? ""} onChange={(e) => setLimit(p.id, "warn_limit", e.target.value)} onBlur={commitAndReaudit} className={INP} />
                   </label>
-                  <label className="block"><span className="mb-1 block text-[13px] font-bold text-red">Crit ≥</span>
+                  <label className="block"><span className="mb-1 block text-[13px] font-bold text-red">Crit &gt;</span>
                     <input type="number" step="0.1" value={p.crit_limit ?? ""} onChange={(e) => setLimit(p.id, "crit_limit", e.target.value)} onBlur={commitAndReaudit} className={INP} />
                   </label>
                   <label className="block"><span className="mb-1 block text-[13px] font-bold text-yellow">Penalty −</span>

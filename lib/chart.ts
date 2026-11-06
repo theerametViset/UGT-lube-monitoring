@@ -35,8 +35,9 @@ export function ensureChartRegistered(): void {
 // Chart.js paints on a canvas, so Tailwind classes can't reach it: read the theme's
 // own colour tokens (app/globals.css, "R G B") so charts follow light / dark and any
 // palette change. Called during render; charts re-render on theme change.
-export function tokenColor(name: string, alpha = 1): string {
-  const rgb = typeof window === "undefined" ? "" : getComputedStyle(document.documentElement).getPropertyValue(`--c-${name}`).trim();
+// `from`: read the token where the chart sits (the report's white paper keeps light colours in dark mode).
+export function tokenColor(name: string, alpha = 1, from?: Element | null): string {
+  const rgb = typeof window === "undefined" ? "" : getComputedStyle(from ?? document.documentElement).getPropertyValue(`--c-${name}`).trim();
   const [r, g, b] = (rgb || "128 128 128").split(/\s+/);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
@@ -49,7 +50,7 @@ function stackTop(c: BarCtx): number {
   for (let i = ds.length - 1; i >= 0; i--) if (c.chart.isDatasetVisible(i) && Number(ds[i].data[c.dataIndex]) > 0) return i;
   return -1;
 }
-export function stackedBarLook(horizontal = false) {
+export function stackedBarLook(horizontal = false, from?: Element | null) {
   const end = horizontal ? { topRight: 6, bottomRight: 6 } : { topLeft: 6, topRight: 6 };
   // A segment only a few px tall (2 warnings among 200 healthy) would vanish under the gap line.
   const tall = (c: BarCtx) => {
@@ -60,7 +61,7 @@ export function stackedBarLook(horizontal = false) {
     borderRadius: (c: BarCtx) => (c.datasetIndex === stackTop(c) ? end : 0),
     // a 2px surface-coloured gap between stacked segments
     borderWidth: (c: BarCtx) => (c.datasetIndex === stackTop(c) || !tall(c) ? 0 : horizontal ? { right: 2 } : { top: 2 }),
-    borderColor: tokenColor("bg2"),
+    borderColor: tokenColor("bg2", 1, from),
     borderSkipped: false as const,
   };
 }
@@ -75,7 +76,7 @@ export function barEntrance(off = false) {
   };
 }
 // Tooltip in the app's surface colours instead of Chart.js's default black box.
-export function tooltipLook() {
+export function tooltipLook(from?: Element | null) {
   return {
     backgroundColor: tokenColor("bg3", 0.97),
     titleColor: tokenColor("t1"),

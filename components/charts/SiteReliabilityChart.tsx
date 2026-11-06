@@ -71,15 +71,18 @@ export function SiteReliabilityChart({
   modeToggle?: boolean;
 }) {
   const router = useRouter();
+  // the chart's own box, so colours follow the surface it sits on (white report paper in dark mode)
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  const tc = (name: string, alpha = 1) => tokenColor(name, alpha, host);
   const dark = useIsDarkMode();
   const [problemsOnly, setProblemsOnly] = useState(modeToggle);
   const data = problemsOnly ? problemRows(allSites) : allSites;
-  void dark; // re-render on theme change so tokenColor() reads the new palette
-  const tick = tokenColor("t2");
-  const grid = tokenColor("border", 0.35);
+  void dark; // re-render on theme change so tc() reads the new palette
+  const tick = tc("t2");
+  const grid = tc("border", 0.35);
   // second line: the plant's average Health Score (cached assets.health) — the card's subtitle says so
   const labels = data.map((d) => [d.code, `${d.avgHealth}`]);
-  const look = stackedBarLook();
+  const look = stackedBarLook(false, host);
 
   const stackMax = Math.max(1, ...data.map((d) => (problemsOnly ? d.warning + d.critical : d.total)));
   // "ทั้งหมด": 1 critical among 249 machines would be a sub-pixel sliver. Draw each problem segment
@@ -96,8 +99,8 @@ export function SiteReliabilityChart({
         // problems-only: the healthy machines would dwarf the few that need attention
         data: data.map((d) => (problemsOnly ? 0 : d.healthy)),
         // muted, so the eye goes to the warning / critical segments first
-        backgroundColor: tokenColor("green", 0.5),
-        hoverBackgroundColor: tokenColor("green", 0.75),
+        backgroundColor: tc("green", 0.5),
+        hoverBackgroundColor: tc("green", 0.75),
         stack: "s",
         ...look,
       },
@@ -106,8 +109,8 @@ export function SiteReliabilityChart({
         label: "เฝ้าระวัง",
         data: data.map((d) => shown(d.warning)),
         real: data.map((d) => d.warning),
-        backgroundColor: tokenColor("yellow", 0.85),
-        hoverBackgroundColor: tokenColor("yellow"),
+        backgroundColor: tc("yellow", 0.85),
+        hoverBackgroundColor: tc("yellow"),
         stack: "s",
         ...look,
       },
@@ -116,8 +119,8 @@ export function SiteReliabilityChart({
         label: "วิกฤต",
         data: data.map((d) => shown(d.critical)),
         real: data.map((d) => d.critical),
-        backgroundColor: tokenColor("red", 0.9),
-        hoverBackgroundColor: tokenColor("red"),
+        backgroundColor: tc("red", 0.9),
+        hoverBackgroundColor: tc("red"),
         stack: "s",
         ...look,
       },
@@ -151,9 +154,9 @@ export function SiteReliabilityChart({
     plugins: {
       legend: { display: false },
       // @ts-expect-error custom plugin option
-      problemCounts: { warnColor: tokenColor("yellow"), critColor: tokenColor("red") },
+      problemCounts: { warnColor: tc("yellow"), critColor: tc("red") },
       tooltip: {
-        ...tooltipLook(),
+        ...tooltipLook(host),
         mode: "index" as const,
         callbacks: {
           title: (items) => (items[0] ? data[items[0].dataIndex]?.code ?? "" : ""),
@@ -186,7 +189,7 @@ export function SiteReliabilityChart({
   return (
     // min-h keeps the chart usable when stacked on mobile; the absolute inner box lets the
     // canvas follow a flex-grown parent without Chart.js's resize feedback loop.
-    <div id="site-reliability-chart" className={`flex min-h-[300px] flex-col ${className ?? ""}`}>
+    <div ref={setHost} id="site-reliability-chart" className={`flex min-h-[300px] flex-col ${className ?? ""}`}>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {modeToggle && <ProblemsToggle problemsOnly={problemsOnly} onChange={setProblemsOnly} />}

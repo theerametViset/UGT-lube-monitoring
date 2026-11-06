@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SiteReliabilityChart } from "@/components/charts/SiteReliabilityChart";
+import { execVerdict, reportDate, reportNumber, reportTexts, scopeReport, type ReportEdits } from "@/lib/exec-summary-text";
+import type { ActionReason } from "@/lib/scoring/advice";
 import { formatNumber } from "@/lib/utils";
-import { formatThaiDateTime } from "@/lib/format";
 import { exportElementToPdf } from "@/lib/pdf-export";
 import { viscCriteriaText } from "@/lib/viscosity-limits";
 import type { DashboardData } from "@/lib/queries/assets";
 import type { AlarmConfig } from "@/lib/queries/alarms";
 import { readableText } from "@/lib/color";
-import { healthColor, statusFromHealth } from "@/lib/scoring/health";
 
 export interface ReportConfig {
   type: "exec" | "tech" | "board";
@@ -18,17 +17,18 @@ export interface ReportConfig {
   prepared: string;
   reviewed: string;
   approved: string;
+  /** Preparer's note, shown under the summary (and in the email). */
+  note?: string;
 }
 
-const PERIOD_LABEL: Record<string, string> = {
-  monthly: "รายเดือน — กรกฎาคม 2026",
-  quarterly: "รายไตรมาส — Q3/2026",
-  ytd: "สะสมตั้งแต่ต้นปี (YTD 2026)",
-};
+/** localStorage key the Reports page uses to hand its text edits to the print tab. */
+export const REPORT_EDITS_KEY = "ugt-report-edits";
+
+// one report per reader: "board" is the plant manager's report (key kept for old print links)
 const TYPE_LABEL: Record<string, string> = {
   exec: "Executive Summary",
-  tech: "Technical Deep-Dive Report",
-  board: "Full Board Report",
+  board: "Plant Report",
+  tech: "Oil Analysis Technical Report",
 };
 
 function Section({
@@ -53,6 +53,19 @@ function Section({
   );
 }
 
+// one look for every report table: same header row, numbers right-aligned in fixed columns, a 0 greyed out
+const TH_ROW = "border-b border-border bg-black/[0.03] text-[8px] font-semibold uppercase tracking-wide text-t3";
+function Num({ v, color, bold }: { v: number; color?: string; bold?: boolean }) {
+  return (
+    <td
+      className={`py-1.5 pr-2 text-right tabular-nums ${bold ? "font-semibold" : ""}`}
+      style={{ color: v === 0 ? "#9ca3af" : color ? readableText(color) : undefined }}
+    >
+      {formatNumber(v)}
+    </td>
+  );
+}
+
 function MethodologyTable({ params, scoreConfig }: { params: AlarmConfig["params"]; scoreConfig: AlarmConfig["scoreConfig"] }) {
   const visc = viscCriteriaText();
   return (
@@ -70,8 +83,8 @@ function MethodologyTable({ params, scoreConfig }: { params: AlarmConfig["params
         {params.map((p) => (
           <tr key={p.id} className="border-b border-black/5">
             <td className="py-1">{p.name}</td>
-            <td className="py-1 text-right font-mono text-yellow">{p.key === "visc" ? visc.warn : `≥ ${p.warn_limit}`}</td>
-            <td className="py-1 text-right font-mono text-red">{p.key === "visc" ? visc.crit : `≥ ${p.crit_limit}`}</td>
+            <td className="py-1 text-right font-mono text-yellow">{p.key === "visc" ? visc.warn : `> ${p.warn_limit}`}</td>
+            <td className="py-1 text-right font-mono text-red">{p.key === "visc" ? visc.crit : `> ${p.crit_limit}`}</td>
             <td className="py-1 text-right font-mono text-yellow">−{p.warn_penalty ?? scoreConfig.warn_penalty}</td>
             <td className="py-1 text-right font-mono text-red">−{p.crit_penalty ?? scoreConfig.crit_penalty}</td>
           </tr>
@@ -85,53 +98,53 @@ export function ReportDoc({
   data,
   alarm,
   config,
+  reasons = {},
+  edits: editsProp,
   autoPrint = false,
-  execSummaryOverride,
-  execSummarySource,
   showToolbar = false,
 }: {
   data: DashboardData;
   alarm: AlarmConfig;
   config: ReportConfig;
+  /** Cause + action per critical machine (server, getActionReasons). */
+  reasons?: Record<string, ActionReason>;
+  /** Reworded narrative (ReportsClient's edit panel); the print page reads it from localStorage. */
+  edits?: ReportEdits;
   autoPrint?: boolean;
-  /** AI-written executive summary (replaces the static rule-based paragraph). */
-  execSummaryOverride?: string;
-  execSummarySource?: string;
   /** Show the on-screen print toolbar (only on the print route, not inline preview). */
   showToolbar?: boolean;
 }) {
   const isExec = config.type === "exec";
-  const scoped = config.site
-    ? data.perSite.find((p) => p.code === config.site) ?? data.kpis
-    : data.kpis;
-  const verdict = { Healthy: "Stable (ปกติ)", Warning: "At Risk (เฝ้าระวัง)", Critical: "Critical (วิกฤต)" }[statusFromHealth(data.kpis.avgHealth)];
-  const verdictColor = healthColor(data.kpis.avgHealth);
+  const isTech = config.type === "tech";
+  let sec = 0;
+  const no = () => String(++sec); // sections differ per report type, so number them as they render
+  // every section below (except the plant comparison table) speaks about the chosen plant only
+  const d = scopeReport(data, config.site);
+  const scoped = d.kpis;
+  const sites = d.siteReliability;
+  const scopeLabel = config.site ? `โรงงาน ${config.site}` : "ทุกโรงงาน";
+  // from the counts, not the average: one critical machine among hundreds still needs action
+  const v = execVerdict(scoped, sites);
+  const verdictColor = { crit: "#ef4444", warn: "#f59e0b", ok: "#22c55e" }[v.tone];
+  // technical report lists every type; the others list only the types with a problem
+  const riskTypes = isTech ? d.perType : d.perType.filter((t) => t.critical + t.warning > 0);
+  const okTypes = isTech ? [] : d.perType.filter((t) => t.critical + t.warning === 0);
 
-  // rule-based recommendations (derived from real data)
-  const recs: string[] = [];
-  if (data.kpis.critical > 0)
-    recs.push(
-      `เร่งดำเนินการ Corrective Action สำหรับเครื่องจักรสถานะวิกฤต ${data.kpis.critical} เครื่องภายใน 2 สัปดาห์ เพื่อลดความเสี่ยงการหยุดผลิตฉุกเฉิน`,
-    );
-  if (data.kpis.avgHealth < 80)
-    recs.push(
-      `คะแนนสุขภาพเฉลี่ย ${data.kpis.avgHealth}% อยู่ในระดับเฝ้าระวัง — ควรเร่งตรวจสอบเครื่องจักรที่เสื่อมสภาพและทบทวนรอบการเก็บตัวอย่าง`,
-    );
-  const worst = [...data.perSite]
-    .filter((s) => s.total > 0)
-    .sort((a, b) => a.avgHealth - b.avgHealth)[0];
-  if (worst)
-    recs.push(
-      `โรงงาน ${worst.code} มีคะแนนสุขภาพเฉลี่ยต่ำสุด ${worst.avgHealth}% — พิจารณาเพิ่มทรัพยากรตรวจสอบและลดภาระงาน CM`,
-    );
-  const wType = data.perType.find((t) => t.critical > 0);
-  if (wType)
-    recs.push(
-      `ประเภท ${wType.type} มีความเสี่ยงสูงสุด (${wType.critical} วิกฤต) — ตรวจสอบรอบการหล่อลื่นและสภาพแบริ่งอย่างใกล้ชิด`,
-    );
-  recs.push(
-    "รักษาการเก็บตัวอย่าง Oil Analysis ทุก 3 เดือน และ Vibration Survey ตาม ISO 10816-3 อย่างสม่ำเสมอ เพื่อรักษาเสถียรภาพของ Health Score",
-  );
+  // the print tab gets the edits the Reports page stored just before opening it
+  const [storedEdits, setStoredEdits] = useState<ReportEdits>({});
+  useEffect(() => {
+    if (!showToolbar) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(REPORT_EDITS_KEY) ?? "null");
+      const fresh = Date.now() - (saved?.at ?? 0) < 60 * 60 * 1000; // an old bookmark must not pick up last week's wording
+      if (fresh && saved?.site === config.site && saved?.type === config.type && saved.edits) setStoredEdits(saved.edits);
+    } catch {
+      // no stored edits: print the generated text
+    }
+  }, [showToolbar, config.site, config.type]);
+  const edits = editsProp ?? storedEdits;
+  const t = reportTexts(d, config.site, reasons, edits);
+  const edited = Object.keys(edits).length > 0;
 
   const [hasOpener, setHasOpener] = useState(false);
   useEffect(() => {
@@ -151,10 +164,14 @@ export function ReportDoc({
     return () => clearTimeout(t);
   }, [autoPrint]);
 
-  const [generatedAt, setGeneratedAt] = useState("");
+  const [reportNo, setReportNo] = useState("");
+  // shortcut: the report shows the latest state, so "data as of" is today; add a period filter before restoring a period choice
+  const [dataAsOf, setDataAsOf] = useState("");
   useEffect(() => {
-    setGeneratedAt(formatThaiDateTime());
-  }, []);
+    const now = new Date();
+    setDataAsOf(reportDate(now));
+    setReportNo(reportNumber(config.site, config.type, now));
+  }, [config.site, config.type]);
 
   const docRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
@@ -204,79 +221,78 @@ export function ReportDoc({
         </div>
       )}
 
-      <div ref={docRef} className="p-8">
-      {/* 1. Cover band */}
-      <header className="mb-5 overflow-hidden rounded-md bg-cyan px-5 py-4 text-white">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white/15 text-[18px] font-extrabold">
-              ⚙
-            </div>
-            <div>
-              <div className="text-[13px] font-extrabold tracking-tight">
-                UGT RELIABILITY · Lube Monitoring
-              </div>
-              <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/80">
-                Condition Monitoring & Reliability
-              </div>
-            </div>
+      <div ref={docRef} className="p-8 print:p-0">
+      {/* Cover: white with a thin accent bar — prints cleanly, no ink-heavy block */}
+      <header className="mb-5 border-b-2 border-cyan pb-3">
+        <div className="flex items-center justify-between border-l-4 border-cyan pl-2.5">
+          <div>
+            <div className="text-[11px] font-extrabold tracking-tight text-t1">UGT RELIABILITY · Lube Monitoring</div>
+            <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-t3">Condition Monitoring & Reliability</div>
           </div>
-          <div className="text-right text-[8.5px] uppercase tracking-[0.1em] text-white/70">
-            Confidential
-          </div>
+          <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-t3">Confidential</div>
         </div>
-        <div className="mt-4 border-t border-white/20 pt-3">
-          <div className="text-[18px] font-bold leading-tight">
-            {TYPE_LABEL[config.type] ?? "Reliability Report"}
+        <div className="mt-4 flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[20px] font-bold leading-tight text-t1">{TYPE_LABEL[config.type] ?? "Reliability Report"}</h1>
+            <div className="mt-0.5 text-[10.5px] text-t2">รายงานวิเคราะห์สภาพน้ำมันหล่อลื่น</div>
           </div>
-          <div className="mt-1 text-[10.5px] text-white/85">
-            {PERIOD_LABEL[config.period] ?? config.period} · ขอบเขต:{" "}
-            {config.site ? `โรงงาน ${config.site}` : "ทุกโรงงาน (All Sites)"}
-          </div>
-          <div className="mt-0.5 text-[9px] text-white/70">
-            ออกรายงานเมื่อ {generatedAt}
-          </div>
+          <table className="shrink-0 text-[9px]">
+            <tbody>
+              {[
+                ["ขอบเขต", `${scopeLabel} · ${formatNumber(scoped.total)} เครื่อง`],
+                ["ข้อมูล ณ", dataAsOf],
+                ["เลขที่รายงาน", reportNo],
+              ].map(([k, val]) => (
+                <tr key={k}>
+                  <td className="py-px pr-3 text-t3">{k}</td>
+                  <td className="py-px font-semibold text-t1">{val}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </header>
 
       {/* 2. Executive Summary */}
-      <Section no="1" title="บทสรุปผู้บริหาร (Executive Summary)">
-        {execSummaryOverride ? (
-          <div className="space-y-2">
-            {execSummaryOverride.split(/\n{2,}/).map((p, i) => (
-              <p key={i} className="text-justify text-[11px] leading-relaxed text-t2">
-                {p}
+      <Section no={no()} title="บทสรุปผู้บริหาร (Executive Summary)">
+        {/* the verdict first and the only coloured block on the page; the cards below carry just a side line */}
+        <div
+          className="mb-2.5 rounded border px-3 py-2 text-[11px]"
+          style={{ borderColor: verdictColor + "55", background: verdictColor + "12", color: readableText(verdictColor) }}
+        >
+          <b>ผลการประเมิน ({scopeLabel}): {v.label}</b> · {v.detail}
+        </div>
+          {/* same content as the emailed summary (lib/ai/exec-summary.ts), laid out for reading */}
+          <div className="space-y-2 text-[10.5px] leading-relaxed text-t2">
+            <p className="text-[12px] font-bold text-t1">{t.headline}</p>
+            {t.critical.map(({ asset: a, what, act }) => {
+              return (
+                <div key={a.id} className="border-l-[3px] border-red py-0.5 pl-2.5">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-bold text-t1">{a.name}</span>
+                    <span className="font-mono text-[8.5px] text-t3"><span className="text-cyan">{a.id}</span> · {a.site}</span>
+                    <span className="ml-auto font-mono text-[9px] font-bold" style={{ color: readableText("#ef4444") }}>Health {a.health}</span>
+                  </div>
+                  <div className="mt-0.5"><span className="font-semibold text-t1">ปัญหาที่พบ: </span>{what}</div>
+                  <div><span className="font-semibold text-t1">สิ่งที่ควรทำ: </span>{act}</div>
+                </div>
+              );
+            })}
+            {t.more && <p className="text-t3">{t.more}</p>}
+            {t.warning && (
+              <div className="border-l-[3px] border-yellow py-0.5 pl-2.5">{t.warning}</div>
+            )}
+            {config.note?.trim() && (
+              <p className="italic text-t2">
+                <span className="font-semibold not-italic text-t1">หมายเหตุผู้จัดทำ: </span>
+                {config.note.trim()}
               </p>
-            ))}
-            {execSummarySource && (
-              <div className="text-[8.5px] font-medium text-t3">
-                ✨ สรุปโดย AI ({execSummarySource})
-              </div>
             )}
           </div>
-        ) : (
-          <p className="text-justify text-[11px] leading-relaxed text-t2">
-            กองเครื่องจักรภายใต้ขอบเขตรายงานมีจำนวนทั้งสิ้น{" "}
-            <b className="text-t1">{formatNumber(data.kpis.total)}</b> เครื่อง คะแนนสุขภาพเฉลี่ย{" "}
-            <b style={{ color: readableText(verdictColor) }}>{data.kpis.avgHealth}%</b> จัดอยู่ในระดับ{" "}
-            <b style={{ color: readableText(verdictColor) }}>{verdict}</b> โดยพบเครื่องจักรสถานะวิกฤต{" "}
-            <b className="text-red">{data.kpis.critical}</b> เครื่อง และสถานะเฝ้าระวัง{" "}
-            <b className="text-yellow">{data.kpis.warning}</b> เครื่อง ที่ต้องการการติดตามและแทรกแซง
-            คะแนนสุขภาพคำนวณจากผล Oil Analysis และ Vibration Analysis ตามเกณฑ์ ISO/ASTM/ISO 10816-3
-            โดยใช้สูตรเดียวกันทั้งระบบ (compute_health)
-          </p>
-        )}
-        <div
-          className="mt-2 rounded border px-3 py-2 text-[10.5px]"
-          style={{ borderColor: verdictColor + "55", background: verdictColor + "0d", color: readableText(verdictColor) }}
-        >
-          <b>สรุปคำตัดสิน (Overall Verdict): </b>
-          สถานะกองเครื่องจักรโดยรวม = <b>{verdict}</b>
-        </div>
       </Section>
 
       {/* 3. Fleet Health Overview */}
-      <Section no="2" title="ภาพรวมสุขภาพกองเครื่องจักร (Fleet Health Overview)">
+      <Section no={no()} title="ภาพรวมสุขภาพเครื่องจักร (Health Overview)">
         <div className="grid grid-cols-4 gap-2">
           {[
             ["สินทรัพย์รวม", scoped.total, "#0066cc"],
@@ -293,135 +309,230 @@ export function ReportDoc({
           ))}
         </div>
         <div className="mt-1.5 text-[10px] text-t2">
-          คะแนนสุขภาพเฉลี่ย: <b className="text-cyan">{scoped.avgHealth}%</b>
+          Health Score เฉลี่ย: <b className="text-cyan">{scoped.avgHealth}</b>
           {"  ·  ขอบเขต: "}
-          {config.site ? `โรงงาน ${config.site}` : "ทุกโรงงาน"}
+          {scopeLabel}
         </div>
       </Section>
 
-      {/* 4. Site Reliability */}
-      <Section no="3" title="ประสิทธิภาพรายโรงงาน (Site Reliability)">
-        <table className="w-full border-collapse text-left text-[10px]">
+      {/* Plant comparison — executive + plant reports */}
+      {!isTech && (
+      <Section no={no()} title={config.site && !isExec ? `ข้อมูลโรงงาน ${config.site} (Site Summary)` : "เปรียบเทียบรายโรงงาน (Site Comparison)"}>
+        <table className="w-full table-fixed border-collapse text-left text-[10px]">
+          <colgroup><col /><col className="w-[15%]" /><col className="w-[15%]" /><col className="w-[15%]" /><col className="w-[15%]" /><col className="w-[15%]" /></colgroup>
           <thead>
-            <tr className="border-b border-border bg-black/[0.03] text-[8.5px] uppercase text-t3">
-              <th scope="col" className="py-1.5 pl-1">Site</th>
-              <th scope="col" className="py-1.5 text-right">Healthy</th>
-              <th scope="col" className="py-1.5 text-right">Warning</th>
-              <th scope="col" className="py-1.5 text-right">Critical</th>
-              <th scope="col" className="py-1.5 text-right">Total</th>
-              <th scope="col" className="py-1.5 pr-1 text-right">Avg Health</th>
+            <tr className={TH_ROW}>
+              <th scope="col" className="py-1.5 pl-2">Site</th>
+              <th scope="col" className="py-1.5 pr-2 text-right">Critical</th>
+              <th scope="col" className="py-1.5 pr-2 text-right">Warning</th>
+              <th scope="col" className="py-1.5 pr-2 text-right">Healthy</th>
+              <th scope="col" className="py-1.5 pr-2 text-right">Total</th>
+              <th scope="col" className="py-1.5 pr-2 text-right">Avg Health</th>
             </tr>
           </thead>
           <tbody>
-            {data.perSite.map((s) => (
+            {/* plant report on one plant: that plant only; executive keeps the comparison */}
+            {(config.site && !isExec ? sites : data.perSite).map((s) => (
               <tr
                 key={s.code}
                 className="rp-row border-b border-black/5"
                 style={config.site === s.code ? { background: "#0066cc0d" } : undefined}
               >
-                <td className="py-1.5 pl-1 font-semibold">{s.code}</td>
-                <td className="py-1.5 text-right font-mono text-green">{s.healthy}</td>
-                <td className="py-1.5 text-right font-mono text-yellow">{s.warning}</td>
-                <td className="py-1.5 text-right font-mono text-red">{s.critical}</td>
-                <td className="py-1.5 text-right font-mono">{s.total}</td>
-                <td className="py-1.5 pr-1 text-right font-mono font-semibold">{s.avgHealth}%</td>
+                <td className="py-1.5 pl-2 font-semibold text-t1">{s.code}</td>
+                <Num v={s.critical} color="#ef4444" bold />
+                <Num v={s.warning} color="#eab308" bold />
+                <Num v={s.healthy} />
+                <Num v={s.total} />
+                <td className="py-1.5 pr-2 text-right tabular-nums">{s.avgHealth}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="mt-2">
-          <SiteReliabilityChart data={data.perSite} noAnimation />
-        </div>
       </Section>
+      )}
 
       {/* 5. Risk Concentration by Equipment Type (Tech/Full) */}
-      {!isExec && data.perType.length > 0 && (
-        <Section no="4" title="ความเสี่ยงแยกตามประเภทเครื่องจักร (Risk Concentration)">
-          <table className="w-full border-collapse text-left text-[10px]">
-            <thead>
-              <tr className="border-b border-border bg-black/[0.03] text-[8.5px] uppercase text-t3">
-                <th scope="col" className="py-1.5 pl-1">ประเภทเครื่องจักร</th>
-                <th scope="col" className="py-1.5 text-right">Healthy</th>
-                <th scope="col" className="py-1.5 text-right">Warning</th>
-                <th scope="col" className="py-1.5 text-right">Critical</th>
-                <th scope="col" className="py-1.5 pr-1 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.perType.map((t) => (
-                <tr key={t.type} className="rp-row border-b border-black/5">
-                  <td className="py-1.5 pl-1">
-                    <span className="font-semibold">{t.abbr}</span> · {t.type}
-                  </td>
-                  <td className="py-1.5 text-right font-mono text-green">{t.healthy}</td>
-                  <td className="py-1.5 text-right font-mono text-yellow">{t.warning}</td>
-                  <td className="py-1.5 text-right font-mono text-red">{t.critical}</td>
-                  <td className="py-1.5 pr-1 text-right font-mono">{t.total}</td>
+      {!isExec && d.perType.length > 0 && (
+        <Section no={no()} title="ความเสี่ยงแยกตามประเภทเครื่องจักร (Risk Concentration)">
+          {/* only the types with a problem; the healthy rest is one line, not dozens of 0 / 0 rows */}
+          {riskTypes.length === 0 ? (
+            <div className="py-2 text-[10.5px] text-green">ทุกประเภทเครื่องจักรอยู่ในเกณฑ์ปกติ</div>
+          ) : (
+            <table className="w-full table-fixed border-collapse text-left text-[10px]">
+              <colgroup><col /><col className="w-[15%]" /><col className="w-[15%]" /><col className="w-[15%]" /></colgroup>
+              <thead>
+                <tr className={TH_ROW}>
+                  <th scope="col" className="py-1.5 pl-2">ประเภทเครื่องจักร</th>
+                  <th scope="col" className="py-1.5 pr-2 text-right">Critical</th>
+                  <th scope="col" className="py-1.5 pr-2 text-right">Warning</th>
+                  <th scope="col" className="py-1.5 pr-2 text-right">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {riskTypes.map((t) => (
+                  <tr key={t.type} className="rp-row border-b border-black/5">
+                    <td className="py-1.5 pl-2 text-t1">
+                      <span className="inline-block w-6 font-semibold">{t.abbr}</span>{t.type}
+                    </td>
+                    <Num v={t.critical} color="#ef4444" bold />
+                    <Num v={t.warning} color="#eab308" bold />
+                    <Num v={t.total} />
+                  </tr>
+                ))}
+                {okTypes.length > 0 && (
+                  <tr className="rp-row border-b border-black/5">
+                    <td colSpan={4} className="py-1.5 pl-2 text-t3">
+                      อีก {okTypes.length} ประเภท ({formatNumber(okTypes.reduce((n, t) => n + t.total, 0))} เครื่อง) อยู่ในเกณฑ์ปกติ
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </Section>
       )}
 
-      {/* 6. Top Critical Assets */}
-      <Section no={isExec ? "4" : "5"} title="เครื่องจักรที่ต้องดำเนินการ (Warning & Critical — เรียงตามคะแนนสุขภาพ)">
-        {data.topCritical.length === 0 ? (
-          <div className="py-2 text-[10.5px] text-green">
-            ไม่มีเครื่องจักรในสถานะ Warning หรือ Critical ในขอบเขตนี้
-          </div>
-        ) : (
-          <table className="w-full border-collapse text-left text-[10px]">
-            <thead>
-              <tr className="border-b border-border bg-black/[0.03] text-[8.5px] uppercase text-t3">
-                <th scope="col" className="py-1.5 pl-1">#</th>
-                <th scope="col" className="py-1.5">Asset ID</th>
-                <th scope="col" className="py-1.5">ชื่อ</th>
-                <th scope="col" className="py-1.5">Site</th>
-                <th scope="col" className="py-1.5">Status</th>
-                <th scope="col" className="py-1.5 pr-1 text-right">Health</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.topCritical.map((a, i) => (
-                <tr key={a.id} className="rp-row border-b border-black/5">
-                  <td className="py-1.5 pl-1 font-mono text-t3">{i + 1}</td>
-                  <td className="py-1.5 font-mono text-cyan">{a.id}</td>
-                  <td className="py-1.5">{a.name}</td>
-                  <td className="py-1.5">{a.site}</td>
-                  <td className="py-1.5">
-                    <span className={a.status === "Critical" ? "text-red font-semibold" : "text-yellow font-semibold"}>
-                      {a.status === "Critical" ? "🔴 Critical" : "⚠️ Warning"}
-                    </span>
-                  </td>
-                  <td className="py-1.5 pr-1 text-right font-mono font-bold" style={{ color: readableText(a.status === "Critical" ? "#ef4444" : "#eab308") }}>
-                    {a.health}
-                  </td>
+      {/* Machines needing action — exec: critical names · plant: with cause · tech: every reading over its limit */}
+      {isTech ? (
+        <Section no={no()} title="ผลวิเคราะห์รายเครื่อง (Findings per Machine — ค่าที่วัดได้เทียบเกณฑ์)">
+          {d.topCritical.length === 0 ? (
+            <div className="py-2 text-[10.5px] text-green">ไม่มีเครื่องจักรในสถานะ Warning หรือ Critical ในขอบเขตนี้</div>
+          ) : (
+            // per machine: header, the readings over their limits, then one plan box (same action listed once)
+            <div className="space-y-3">
+              {d.topCritical.map((a) => {
+                const adv = reasons[a.id]?.advice ?? [];
+                const c = a.status === "Critical" ? "#ef4444" : "#eab308";
+                const plan = [...new Set(adv.map((x) => x.action))];
+                return (
+                  <div key={a.id} className="rp-row border-l-[3px] pl-2.5" style={{ borderColor: c }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10.5px] font-bold text-t1">{a.name}</span>
+                      <span className="font-mono text-[8.5px] text-t3">{a.id} · {a.site}</span>
+                      <span className="ml-auto flex items-center gap-1.5">
+                        <span className="whitespace-nowrap rounded px-1.5 py-px text-[8px] font-semibold" style={{ color: readableText(c), background: c + "1a" }}>
+                          {a.status}
+                        </span>
+                        <span className="text-[9px] text-t3">Health</span>
+                        <span className="w-5 text-right text-[11px] font-bold tabular-nums" style={{ color: readableText(c) }}>{a.health}</span>
+                      </span>
+                    </div>
+                    {adv.length === 0 ? (
+                      <div className="mt-1 text-[9.5px] text-t3">ไม่มีรายละเอียดค่าที่เกินเกณฑ์ ตรวจสอบผลแล็บล่าสุดในหน้ารายละเอียดเครื่อง</div>
+                    ) : (
+                      <>
+                        <table className="mt-1 w-full table-fixed border-collapse text-left text-[9.5px]">
+                          <colgroup><col className="w-[40%]" /><col className="w-[22%]" /><col /></colgroup>
+                          <thead>
+                            <tr className={TH_ROW}>
+                              <th scope="col" className="py-1 pl-2">ค่าที่วัดได้</th>
+                              <th scope="col" className="py-1">เกณฑ์</th>
+                              <th scope="col" className="py-1 pr-2">ระดับ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {adv.map((x) => (
+                              <tr key={x.label} className="border-b border-black/5">
+                                <td className="py-1 pl-2 text-t1">{x.label}</td>
+                                <td className="py-1 tabular-nums text-t2">{x.limit?.replace(/^เกณฑ์\s*/, "") ?? "—"}</td>
+                                <td className="py-1 pr-2 font-semibold" style={{ color: readableText(x.level === "crit" ? "#ef4444" : "#eab308") }}>
+                                  {x.badge}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="mt-1.5 rounded border border-black/10 bg-black/[0.02] px-2.5 py-1.5 text-[9.5px] leading-snug">
+                          <div className="mb-0.5 text-[8px] font-semibold uppercase tracking-wide text-t3">แผนดำเนินการ</div>
+                          <ul className="list-disc space-y-0.5 pl-4 text-t2">
+                            {plan.map((p) => <li key={p}>{p}</li>)}
+                          </ul>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+      ) : (
+        // executive report: none — the summary's machine cards already cover it
+        !isExec && (
+        <Section no={no()} title="เครื่องจักรที่ต้องดำเนินการ (Warning & Critical — เรียงตามคะแนนสุขภาพ)">
+          {d.topCritical.length === 0 ? (
+            <div className="py-2 text-[10.5px] text-green">ไม่มีเครื่องจักรในสถานะ Warning หรือ Critical ในขอบเขตนี้</div>
+          ) : (
+            <table className="w-full table-fixed border-collapse text-left text-[10px]">
+              <colgroup>
+                <col className="w-[5%]" />
+                <col className="w-[33%]" />
+                <col />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+              </colgroup>
+              <thead>
+                <tr className={TH_ROW}>
+                  <th scope="col" className="py-1.5 pl-2">#</th>
+                  <th scope="col" className="py-1.5">เครื่องจักร</th>
+                  <th scope="col" className="py-1.5">สาเหตุ (ค่าที่เกินเกณฑ์)</th>
+                  <th scope="col" className="py-1.5 pr-2 text-right">สถานะ</th>
+                  <th scope="col" className="py-1.5 pr-2 text-right">Health</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Section>
+              </thead>
+              <tbody>
+                {d.topCritical.map((a, i) => {
+                  const c = a.status === "Critical" ? "#ef4444" : "#eab308";
+                  const adv = reasons[a.id]?.advice ?? [];
+                  return (
+                    <tr key={a.id} className="rp-row border-b border-black/5 align-top">
+                      <td className="py-1.5 pl-2 tabular-nums text-t3">{i + 1}</td>
+                      <td className="py-1.5 pr-2">
+                        <div className="font-semibold text-t1">{a.name}</div>
+                        <div className="whitespace-nowrap font-mono text-[8.5px] text-t3">{a.id} · {a.site}</div>
+                      </td>
+                        <td className="py-1.5 pr-2 text-[9px] leading-snug text-t2">
+                          {adv.length === 0
+                            ? "—"
+                            : adv.map((x) => (
+                                <div key={x.label}>
+                                  {x.label}{" "}
+                                  <span className="font-semibold" style={{ color: readableText(x.level === "crit" ? "#ef4444" : "#eab308") }}>
+                                    ({x.badge})
+                                  </span>
+                                </div>
+                              ))}
+                        </td>
+                      <td className="py-1.5 pr-2 text-right">
+                        <span
+                          className="inline-block whitespace-nowrap rounded px-1.5 py-px text-[8px] font-semibold"
+                          style={{ color: readableText(c), background: c + "1a" }}
+                        >
+                          {a.status}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-2 text-right text-[11px] font-bold tabular-nums" style={{ color: readableText(c) }}>
+                        {a.health}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </Section>
+        )
+      )}
 
       {/* 7. Scoring Methodology (Tech/Full) */}
-      {!isExec && (
-        <Section no="6" title="ระเบียบวิธีและเกณฑ์การให้คะแนน (Scoring Methodology)">
+      {isTech && (
+        <Section no={no()} title="ระเบียบวิธีและเกณฑ์การให้คะแนน (Scoring Methodology)">
+          {/* oil only: this program scores lubricant condition, vibration is not part of the report */}
           <div className="mb-1.5 text-[10px] text-t2">
-            ค่า Health Score คำนวณฝั่งเซิร์ฟเวอร์ด้วยฟังก์ชัน <b>compute_health</b>:
-            เกิน Warning หักเต็ม Penalty (Warning) · เกิน Critical หักเต็ม Penalty (Critical) ของแต่ละพารามิเตอร์ตามตารางด้านล่าง · น้ำหนัก Oil {alarm.scoreConfig.oil_weight}% /
-            Vibration {alarm.scoreConfig.vib_weight}%
+            Health Score หักคะแนนตามค่าที่เกินเกณฑ์: เกิน Warning หักตามช่อง หัก (W) · เกิน Critical หักตามช่อง หัก (C) ของแต่ละพารามิเตอร์
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="mb-1 text-[8.5px] font-bold uppercase text-yellow">Oil Analysis</div>
-              <MethodologyTable params={alarm.params.filter((p) => p.category === "oil")} scoreConfig={alarm.scoreConfig} />
-            </div>
-            <div>
-              <div className="mb-1 text-[8.5px] font-bold uppercase text-purple">Vibration</div>
-              <MethodologyTable params={alarm.params.filter((p) => p.category === "vib")} scoreConfig={alarm.scoreConfig} />
-            </div>
-          </div>
+          <div className="mb-1 text-[8.5px] font-bold uppercase text-yellow">Oil Analysis</div>
+          <MethodologyTable params={alarm.params.filter((p) => p.category === "oil")} scoreConfig={alarm.scoreConfig} />
           {alarm.params.some((p) => p.key === "visc") && (
             <div className="mt-1 text-[8.5px] text-t3">Viscosity ใช้เกณฑ์ตามเกรด ISO VG ของแต่ละเครื่อง (ISO 3448) ทั้งด้านสูงและต่ำ</div>
           )}
@@ -430,15 +541,17 @@ export function ReportDoc({
 
       {/* 8+9. Recommendations + Signatures — อยู่ด้วยกัน ไม่แยกหน้า */}
       <div className="rp-section">
-        <Section no={isExec ? "5" : "7"} title="ข้อเสนอแนะ (Recommendations)">
+        <Section no={no()} title="ข้อเสนอแนะ (Recommendations)">
           <ul className="list-disc space-y-1 pl-5 text-[10.5px] leading-relaxed text-t2">
-            {recs.map((r, i) => (
-              <li key={i}>{r}</li>
+            {t.recs.map((r) => (
+              <li key={r.tag}>
+                <b className="text-t1">[{r.tag}]</b> {r.text}
+              </li>
             ))}
           </ul>
         </Section>
 
-        <Section no={isExec ? "6" : "8"} title="การลงนาม (Signatures)">
+        <Section no={no()} title="การลงนาม (Signatures)">
           <div className="grid grid-cols-3 gap-5 pt-3">
             {[
               ["ผู้จัดทำ (Prepared)", config.prepared],
@@ -458,10 +571,10 @@ export function ReportDoc({
 
       {/* Footer */}
       <footer className="mt-3 border-t border-border pt-2 text-[8.5px] leading-relaxed text-t3">
+        {/* page numbers come from @page in globals.css when printed */}
         <div>
-          UGT Reliability Lube Monitoring · ออกรายงานเมื่อ {generatedAt} · ข้อมูลจาก Health
-          Score (compute_health) คำนวณฝั่งเซิร์ฟเวอร์ตามมาตรฐาน ISO 4406 / ASTM D4378 / ISO 10816-3 /
-          AGMA 9005 / ISO 17359
+          UGT Reliability Lube Monitoring · {reportNo}
+          {edited && " · ข้อความบางส่วนแก้ไขโดยผู้จัดทำ"}
         </div>
       </footer>
       </div>

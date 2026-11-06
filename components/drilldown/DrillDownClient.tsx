@@ -66,6 +66,7 @@ function Metric({
   warn,
   crit,
   color,
+  level,
 }: {
   label: string;
   value: string | number;
@@ -73,11 +74,17 @@ function Metric({
   warn?: number | null;
   crit?: number | null;
   color?: string;
+  /** The reading's band from the server's scoring breakdown: a value past a limit shows red / yellow, never its series colour. */
+  level?: "warn" | "crit";
 }) {
+  const tone = level === "crit" ? "text-red" : level === "warn" ? "text-yellow" : color ? "" : "text-t1";
   return (
-    <div className="rounded-[10px] border border-border bg-bg3 p-2.5">
-      <div className="text-[13px] font-bold text-t3">{label}</div>
-      <div className={`font-mono text-[19px] font-bold leading-none ${color ? "" : "text-t1"}`} style={color ? { color: readableText(color) } : undefined}>
+    <div className={`rounded-[10px] border bg-bg3 p-2.5 ${level === "crit" ? "border-red/40" : level === "warn" ? "border-yellow/40" : "border-border"}`}>
+      <div className="flex items-center justify-between gap-2 text-[13px] font-bold text-t3">
+        {label}
+        {level && <span className={`rounded px-1.5 text-[12px] ${level === "crit" ? "bg-red/10 text-red" : "bg-yellow/10 text-yellow"}`}>{level === "crit" ? "วิกฤต" : "เฝ้าระวัง"}</span>}
+      </div>
+      <div className={`font-mono text-[19px] font-bold leading-none ${tone}`} style={color && !level ? { color: readableText(color) } : undefined}>
         {value}
       </div>
       {unit ? <div className="mt-0.5 text-[13px] text-t3">{unit}</div> : null}
@@ -259,6 +266,8 @@ export function DrillDownClient({
   const latestOil = oilHistory.length ? oilHistory[oilHistory.length - 1] : null;
   const latestVib = vibHistory.length ? vibHistory[vibHistory.length - 1] : null;
   const cause = actionReason(audit, scoreConfig, latestOil, latestVib, asset.vg_grade);
+  // band of the latest reading per parameter, as scored server-side (Iron rule: no client recompute)
+  const levelOf = (key: string) => audit.items.find((i) => i.key === key)?.level;
 
   const lim = (cat: string, key: string) => params.find((p) => p.category === cat && p.key === key);
   const fe = lim("oil", "fe"),
@@ -377,7 +386,7 @@ export function DrillDownClient({
             )}
           </Card>
           <div className="grid grid-cols-2 gap-2.5">
-            <Metric label="Iron (Fe)" value={latestOil?.fe ?? "—"} unit="ppm" warn={fe?.warn_limit} crit={fe?.crit_limit} color="#ef4444" />
+            <Metric label="Iron (Fe)" value={latestOil?.fe ?? "—"} unit="ppm" warn={fe?.warn_limit} crit={fe?.crit_limit} color="#ef4444" level={levelOf("fe")} />
             <Metric label="ISO cleanliness" value={latestOil?.iso_code ?? "—"} unit="ISO 4406" color="#0066cc" />
           </div>
         </div>
@@ -387,9 +396,9 @@ export function DrillDownClient({
       {tab === "oil" && (
         <div id="panel-oil" role="tabpanel" aria-labelledby="tab-oil">
           <div className="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <Metric label="VISCOSITY @ 40°C" value={latestOil?.visc != null ? Number(latestOil.visc).toFixed(2) : "—"} unit="cSt" warn={viscLimits.warn} crit={viscLimits.crit} color="#22c55e" />
-            <Metric label="Water content" value={latestOil?.water ?? "—"} unit="ppm" warn={water?.warn_limit} crit={water?.crit_limit} color="#38bdf8" />
-            <Metric label="TAN" value={latestOil?.tan != null ? Number(latestOil.tan).toFixed(3) : "—"} unit="mgKOH/g" warn={tan?.warn_limit} crit={tan?.crit_limit} color="#a855f7" />
+            <Metric label="VISCOSITY @ 40°C" value={latestOil?.visc != null ? Number(latestOil.visc).toFixed(2) : "—"} unit="cSt" warn={viscLimits.warn} crit={viscLimits.crit} color="#22c55e" level={levelOf("visc")} />
+            <Metric label="Water content" value={latestOil?.water ?? "—"} unit="ppm" warn={water?.warn_limit} crit={water?.crit_limit} color="#38bdf8" level={levelOf("water")} />
+            <Metric label="TAN" value={latestOil?.tan != null ? Number(latestOil.tan).toFixed(3) : "—"} unit="mgKOH/g" warn={tan?.warn_limit} crit={tan?.crit_limit} color="#a855f7" level={levelOf("tan")} />
           </div>
           {oilHistory.length ? (
             <>
@@ -477,8 +486,8 @@ export function DrillDownClient({
             )}
           </Card>
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            <Metric label="Overall velocity (RMS)" value={latestVib?.vel ?? "—"} unit="mm/s" warn={vel?.warn_limit} crit={vel?.crit_limit} color="#0066cc" />
-            <Metric label="Peak acceleration" value={latestVib?.acc ?? "—"} unit="g-PK" warn={acc?.warn_limit} crit={acc?.crit_limit} color="#f472b6" />
+            <Metric label="Overall velocity (RMS)" value={latestVib?.vel ?? "—"} unit="mm/s" warn={vel?.warn_limit} crit={vel?.crit_limit} color="#0066cc" level={levelOf("vel")} />
+            <Metric label="Peak acceleration" value={latestVib?.acc ?? "—"} unit="g-PK" warn={acc?.warn_limit} crit={acc?.crit_limit} color="#f472b6" level={levelOf("acc")} />
           </div>
           <ReadingsTable
             assetId={asset.id}
@@ -749,8 +758,8 @@ function CriteriaTable({ params, scoreConfig, vgGrade }: { params: AlarmParam[];
                   {p.name} <span className="text-[13px] text-t3">{p.unit}</span>
                   {p.key === "visc" && vgGrade ? <div className="text-[13px] text-t3">ตามเกรด VG {vgGrade} (ISO 3448)</div> : null}
                 </td>
-                <td className="py-1.5 text-right font-mono text-yellow">{p.key === "visc" && vgGrade ? visc.warn : `≥ ${p.warn_limit}`}</td>
-                <td className="py-1.5 text-right font-mono text-red">{p.key === "visc" && vgGrade ? visc.crit : `≥ ${p.crit_limit}`}</td>
+                <td className="py-1.5 text-right font-mono text-yellow">{p.key === "visc" && vgGrade ? visc.warn : `> ${p.warn_limit}`}</td>
+                <td className="py-1.5 text-right font-mono text-red">{p.key === "visc" && vgGrade ? visc.crit : `> ${p.crit_limit}`}</td>
                 <td className="py-1.5 text-right font-mono font-bold text-yellow">{wPen}</td>
                 <td className="py-1.5 text-right font-mono font-bold text-red">{cPen}</td>
               </tr>

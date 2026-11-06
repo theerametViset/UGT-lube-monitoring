@@ -217,7 +217,7 @@ export function AssetDbClient({ rows, total, page, pages, site, q, status, sort,
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead><tr className="border-b border-border bg-black/[0.015] text-[13px] text-t3">
-            {canDelete && <th scope="col" className="px-2.5 py-2"><input type="checkbox" onChange={toggleAll} checked={rows.length > 0 && rows.every((r) => selected.has(r.id))} aria-label="เลือกเครื่องจักรทั้งหมด" /></th>}
+            {canDelete && <th scope="col" className="p-0"><label className="flex min-h-[44px] cursor-pointer items-center px-2.5"><input type="checkbox" className="h-[18px] w-[18px] cursor-pointer" onChange={toggleAll} checked={rows.length > 0 && rows.every((r) => selected.has(r.id))} aria-label="เลือกเครื่องจักรทั้งหมด" /></label></th>}
             <th scope="col" className="px-2.5 py-2">รหัส (ID)</th>
             <th scope="col" className="px-2.5 py-2">ชื่อเครื่องจักร</th>
             <th scope="col" className="px-2.5 py-2">ประเภท</th>
@@ -231,7 +231,7 @@ export function AssetDbClient({ rows, total, page, pages, site, q, status, sort,
             {rows.length === 0 ? <tr><td colSpan={canDelete ? 9 : 8} className="px-2.5 py-3.5 text-center text-t3">ไม่พบข้อมูล</td></tr> : rows.map((a) => {
               const col = types.find((t) => t.name === a.type)?.color ?? "#94a3b8";
               return (<tr key={a.id} className="border-b border-black/[0.025] hover:bg-cyan/[0.025]">
-                {canDelete && <td className="px-2.5 py-2"><input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} aria-label={`เลือกเครื่องจักร ${a.id}`} /></td>}
+                {canDelete && <td className="p-0"><label className="flex min-h-[44px] cursor-pointer items-center px-2.5"><input type="checkbox" className="h-[18px] w-[18px] cursor-pointer" checked={selected.has(a.id)} onChange={() => toggle(a.id)} aria-label={`เลือกเครื่องจักร ${a.id}`} /></label></td>}
                 <td className="px-2.5 py-2 font-mono text-[14px] font-semibold text-cyan">{a.id}</td>
                 <td className="px-2.5 py-2 text-[14px] font-medium">{a.name}</td>
                 <td className="px-2.5 py-2"><span className="rounded border px-1.5 py-0.5 text-[14px]" style={{ color: readableText(col), borderColor: col + "33", background: col + "11" }}>{a.type}</span></td>
@@ -261,7 +261,7 @@ export function AssetDbClient({ rows, total, page, pages, site, q, status, sort,
     {/* Kept away from the everyday buttons: it used to sit next to "Excel" and "+ เพิ่ม". */}
     {canDeleteAll && (
       <div className="flex justify-end">
-        <button type="button" onClick={() => { setDeleteAllText(""); setConfirm("all"); }} className="inline-flex items-center gap-1 text-[13px] text-t3 hover:text-red">
+        <button type="button" onClick={() => { setDeleteAllText(""); setConfirm("all"); }} className="tap inline-flex min-h-[36px] items-center gap-1.5 rounded-pill border border-border px-3 text-[13px] text-t3 transition hover:border-red/50 hover:text-red">
           <Trash2 className="h-3.5 w-3.5" aria-hidden />ลบเครื่องจักรทั้งหมดในระบบ…
         </button>
       </div>

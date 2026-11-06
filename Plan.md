@@ -233,7 +233,7 @@ Setup Supabase + schema/seed
   - [ ] `can_access_site` คืน true ให้ผู้ที่ไม่ได้ login (anon อ่าน assets/readings/ไฟล์แล็บได้) → migration ใหม่ให้ต้องมี `auth.uid()`
   - [ ] `lib/env.ts` เปิด Demo Mode เองบน production เมื่อไม่มี env Supabase (ไม่ต้อง login)
   - [ ] policy `audit_insert` (0012) ให้ผู้ใช้ทุกคนเขียนประวัติปลอมได้
-  - [ ] `/api/ai/diagnose`, `/api/ai/rca`, `/api/ai/exec-summary`, `/api/ai/standard`, `/api/search`, `/api/compare` ไม่ตรวจสิทธิ์ดูโมดูล
+  - [ ] `/api/ai/diagnose`, `/api/ai/rca`, `/api/ai/standard`, `/api/search`, `/api/compare` ไม่ตรวจสิทธิ์ดูโมดูล
   - [ ] เทสต์ที่ล้มเมื่อ action เขียนข้อมูลตัวใดไม่เรียก `requirePermission`
 
 ## 4. Schedule / Timeline (เทียบมาตรฐาน — ปรับตามจังหวะจริง)

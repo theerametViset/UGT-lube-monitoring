@@ -514,9 +514,11 @@ Header: ชื่อ · status badge · type · site · run-hours · Health Inde
 ### 7.8 Board-Level Reports — P0 (basic) → P2 (full PDF)
 **Parity:** `pg-report`
 
-- Config: site, period (monthly/quarterly/YTD), report type (Executive Summary / Technical Deep-Dive / Full Board Report), include sections (PM & WO, Budget), prepared/reviewed/approved by
-- **Generate** → สร้าง preview + export **PDF** (jsPDF + html2canvas, A4, พร้อมกราฟ + ช่องลงนาม)
-- Report History (localStorage ในต้นแบบ → ในระบบจริงเก็บ `reports` table / Supabase Storage)
+- Config: site (ทุกโรงงาน หรือโรงงานเดียว — ทั้งรายงานพูดถึงขอบเขตนั้น), report type ตามคนอ่าน: **Executive Summary** (ผู้บริหาร, 1 หน้า) / **Plant Report** (ผู้จัดการโรงงาน) / **Oil Analysis Technical Report** (วิศวกร), prepared/reviewed/approved by, หมายเหตุผู้จัดทำ — ยังไม่มีตัวกรองช่วงเวลา: รายงานแสดงสถานะล่าสุด ("ข้อมูล ณ วันที่")
+- เนื้อหา: ผลการประเมิน (จากจำนวนเครื่องวิกฤต/เฝ้าระวัง ไม่ใช่ค่าเฉลี่ย) → บทสรุป (เครื่องวิกฤตพร้อมปัญหาที่พบและสิ่งที่ควรทำ จากข้อความชุดเดียวกับ Dashboard) → KPI → ตารางตามประเภทรายงาน → ข้อเสนอแนะ → ลงนาม; ข้อความทั้งหมดมาจาก `lib/exec-summary-text.ts` (`reportTexts`) ใช้ร่วมกับอีเมล
+- **Generate** → preview + หน้าพิมพ์ A4 (Save as PDF) · ส่งอีเมลบทสรุปของรายงานนั้น (`reports:send_email`, server สร้างข้อความเอง)
+- แก้ไขข้อความ (`reports:edit`, 0036): แก้ได้เฉพาะข้อความบรรยาย ตัวเลข/ผลการประเมิน/ตารางล็อก · ใช้ทั้ง preview, หน้าพิมพ์, อีเมล · บันทึก Audit (EDIT / SEND)
+- ไม่มีบทสรุปจาก AI (ถอดออก 2026-11-06 — ข้อความจากข้อมูลจริงเท่านั้น)
 
 ### 7.9–7.16 (ถอดออกแล้ว)
 PM Compliance Hub, PM Calendar, Work Orders, PM Master Setup, PM Alert Center, EAM Reporting, AI Reliability Center และ Budget Tracker (รวม AI Fleet Chat) ถูกถอดออกจากแอปเมื่อ 2026-10-28 — ดู `docs/superpowers/specs/2026-10-28-remove-pm-modules-design.md` และ git history สำหรับ spec เดิม เมื่อผลแล็บเกินเกณฑ์ หน้า Data Entry แสดง "ค่าเกินเกณฑ์ ควรเปิดงานซ่อม" แทนการสร้าง Work Order
