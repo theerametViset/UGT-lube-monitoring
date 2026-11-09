@@ -20,3 +20,8 @@ export function formatFileSize(bytes: number | null): string {
 export function formatThaiDateTime(date: Date = new Date()): string {
   return date.toLocaleString("th-TH");
 }
+
+/** "2026-10" → "ต.ค. 69" (a lab period; the month only, no day). */
+export function formatPeriodTh(period: string): string {
+  return new Date(`${period}-01T00:00:00Z`).toLocaleDateString("th-TH", { month: "short", year: "2-digit", timeZone: "UTC" });
+}

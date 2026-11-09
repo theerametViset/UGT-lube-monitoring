@@ -78,6 +78,29 @@ export async function getLatestReadingsMany(
   return out;
 }
 
+/**
+ * Each machine's latest lab (oil) period, or no entry when it has none yet. assets.last_update
+ * is not this: it holds the month the machine was added and saving a reading never moves it.
+ */
+export async function getLatestLabPeriods(assetIds: string[], supabase?: SupabaseClient): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  if (!assetIds.length) return out;
+  if (isDemoMode()) {
+    for (const id of assetIds) {
+      const p = getDemoOilHistory(id).at(-1)?.period;
+      if (p) out[id] = p;
+    }
+    return out;
+  }
+  const db = supabase ?? createClient();
+  // 100 ids per request keeps the URL short when the weekly email lists hundreds of machines
+  for (let i = 0; i < assetIds.length; i += 100) {
+    const { data } = await db.from("latest_oil_readings").select("asset_id,period").in("asset_id", assetIds.slice(i, i + 100));
+    for (const r of data ?? []) out[r.asset_id as string] = r.period as string;
+  }
+  return out;
+}
+
 // Full readings history (asc by period) for trend charts.
 export async function getReadingsHistory(assetId: string): Promise<{
   oil: OilReading[];

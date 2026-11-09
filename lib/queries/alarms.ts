@@ -79,14 +79,21 @@ export async function getAssetAlarmConfigs(assetIds: string[], base: AlarmConfig
   }
   if (!assetIds.length) return out;
   supabase ??= createClient();
-  const [pRes, sRes] = await Promise.all([
-    supabase.from("asset_alarm_overrides").select("*").in("asset_id", assetIds),
-    supabase.from("asset_score_overrides").select("*").in("asset_id", assetIds),
-  ]);
-  if (pRes.error) throw new Error(pRes.error.message);
-  if (sRes.error) throw new Error(sRes.error.message);
-  const params = (pRes.data ?? []) as AssetAlarmOverride[];
-  const scores = (sRes.data ?? []) as AssetScoreOverride[];
+  const db = supabase;
+  const params: AssetAlarmOverride[] = [];
+  const scores: AssetScoreOverride[] = [];
+  // 100 ids per request keeps the URL short when hundreds of machines are asked for
+  for (let i = 0; i < assetIds.length; i += 100) {
+    const ids = assetIds.slice(i, i + 100);
+    const [pRes, sRes] = await Promise.all([
+      db.from("asset_alarm_overrides").select("*").in("asset_id", ids),
+      db.from("asset_score_overrides").select("*").in("asset_id", ids),
+    ]);
+    if (pRes.error) throw new Error(pRes.error.message);
+    if (sRes.error) throw new Error(sRes.error.message);
+    params.push(...((pRes.data ?? []) as AssetAlarmOverride[]));
+    scores.push(...((sRes.data ?? []) as AssetScoreOverride[]));
+  }
   for (const id of assetIds) {
     out.set(id, mergeAssetConfig(base, params.filter((o) => o.asset_id === id), scores.find((o) => o.asset_id === id) ?? null));
   }

@@ -14,38 +14,10 @@ import { SiteReliabilityChart } from "@/components/charts/SiteReliabilityChart";
 import { RiskConcentrationChart } from "@/components/charts/RiskConcentrationChart";
 import { OilLevel } from "@/components/charts/OilLevel";
 import { formatNumber } from "@/lib/utils";
+import { formatPeriodTh } from "@/lib/format";
+import { getLatestLabPeriods } from "@/lib/queries/readings";
 import { healthColor, statusLabelTh } from "@/lib/scoring/health";
 import { readableText } from "@/lib/color";
-
-// Calculate aging: how long since last_update
-function getAging(lastUpdate: string | null): string {
-  if (!lastUpdate) return "ไม่ทราบ";
-  const now = new Date();
-  const last = new Date(lastUpdate);
-  const diffMs = now.getTime() - last.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) return "วันที่ไม่ถูกต้อง";  // Future date = bad data
-  if (diffDays === 0) return "วันนี้";
-  if (diffDays === 1) return "เมื่อวาน";
-  if (diffDays < 7) return `${diffDays} วันก่อน`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} สัปดาห์ก่อน`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} เดือนก่อน`;
-  return `${Math.floor(diffDays / 365)} ปีก่อน`;
-}
-
-// Get urgency color based on aging days
-function getAgingColor(lastUpdate: string | null): string {
-  if (!lastUpdate) return "text-t3";
-  const now = new Date();
-  const last = new Date(lastUpdate);
-  const diffMs = now.getTime() - last.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays > 90) return "text-red font-semibold";  // Over 3 months - critical urgency
-  if (diffDays > 30) return "text-yellow";  // Over 1 month - moderate urgency
-  return "text-green";  // Recent - low urgency
-}
 
 // A KPI card that is a link; `active` marks the status currently filtering the table.
 function KpiLink({ href, active = false, title, children }: { href: string; active?: boolean; title: string; children: React.ReactNode }) {
@@ -104,7 +76,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     // worst first: the machines that need attention lead the table
     getAssetsList({ site, q, status, sort: "health_asc", page, pageSize: FLEET_PAGE }),
   ]);
-  const reasons = await getActionReasons(data.topCritical);
+  const [reasons, lab] = await Promise.all([
+    getActionReasons(data.topCritical),
+    // the real latest lab month — assets.last_update is the month the machine was added
+    getLatestLabPeriods([...new Set([...data.topCritical, ...table.rows].map((a) => a.id))]),
+  ]);
+  const labText = (id: string) => (lab[id] ? formatPeriodTh(lab[id]) : "—");
 
   const topType = data.perType[0];
   const riskiest = topType && topType.critical > 0;
@@ -216,7 +193,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                     <div className="flex flex-wrap items-center gap-x-2 text-[13px] text-t3">
                       <span className="inline-flex items-center gap-1"><Factory className="h-3 w-3" aria-hidden />{a.site}</span>
                       <span>{a.type}</span>
-                      <span className={getAgingColor(a.last_update)}>อัปเดต {getAging(a.last_update)}</span>
+                      <span>ผลแล็บ {labText(a.id)}</span>
                     </div>
                   </div>
                   <div className="col-start-2 md:col-start-auto">
@@ -354,10 +331,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                           <b className="tabular-nums" style={{ color: readableText(healthColor(a.health)) }}>{a.health}</b>
                           <span className="text-[13px] text-t3">{statusLabelTh(a.status)}</span>
                         </span>
-                        <div className={`text-[12px] md:hidden ${getAgingColor(a.last_update)}`} title="ผลแล็บล่าสุด">{getAging(a.last_update)}</div>
+                        <div className={`text-[12px] md:hidden ${lab[a.id] ? "text-t2" : "text-t3"}`} title="ผลแล็บล่าสุด">ผลแล็บ {labText(a.id)}</div>
                       </td>
-                      <td className={`hidden whitespace-nowrap px-2.5 py-2 text-[13px] md:table-cell ${getAgingColor(a.last_update)}`} title={a.last_update ?? undefined}>
-                        {getAging(a.last_update)}
+                      <td className={`hidden whitespace-nowrap px-2.5 py-2 text-[13px] md:table-cell ${lab[a.id] ? "text-t2" : "text-t3"}`} title={lab[a.id] ? undefined : "ยังไม่มีผลแล็บ"}>
+                        {labText(a.id)}
                       </td>
                     </tr>
                   ))
