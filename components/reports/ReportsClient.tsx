@@ -41,11 +41,14 @@ export function ReportsClient({
 }) {
   const [site, setSite] = useState("");
   const period = "ytd"; // no period filter yet: reports show the latest state (kept for print-link compatibility)
-  const [type, setType] = useState<ReportConfig["type"]>("board");
+  // Readers (no reports:edit — Manager, Viewer) get the executive report at once: no form to fill,
+  // no Generate button, the preview follows the plant / type they pick.
+  const reader = !canEdit;
+  const [type, setType] = useState<ReportConfig["type"]>(reader ? "exec" : "board");
   const [prepared, setPrepared] = useState("Reliability Engineer");
   const [reviewed, setReviewed] = useState("Maintenance Manager");
   const [approved, setApproved] = useState("Plant Manager");
-  const [generated, setGenerated] = useState(false);
+  const [generated, setGenerated] = useState(reader);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [note, setNote] = useState("");
   const [edits, setEdits] = useState<ReportEdits>({});
@@ -189,6 +192,7 @@ export function ReportsClient({
                 ))}
               </div>
             </Field>
+            {!reader && (<>
             <div className="grid grid-cols-1 gap-2.5">
               <Field label="ผู้จัดทำ (Prepared by)"><input value={prepared} onChange={(e) => setPrepared(e.target.value)} className={INP} /></Field>
               <Field label="ผู้ทบทวน (Reviewed by)"><input value={reviewed} onChange={(e) => setReviewed(e.target.value)} className={INP} /></Field>
@@ -204,6 +208,7 @@ export function ReportsClient({
               />
             </Field>
             <Button variant="primary" onClick={generate} className="w-full justify-center py-2.5"><FileText className="h-3.5 w-3.5" aria-hidden />สร้างตัวอย่างรายงาน (Generate Preview)</Button>
+            </>)}
           </div>
         </Card>
 
